@@ -29,6 +29,7 @@ import {
   MessageSquare,
   Package
 } from 'lucide-react'
+import { Lightbulb } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
 
@@ -52,6 +53,7 @@ const menuItems: MenuItem[] = [
   { name: 'Equipes', href: '/teams', icon: UserCheck, roles: ['Admin', 'Editor'] },
   { name: 'Almoxarifado', href: '/almoxarifado', icon: Package, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: 'Inspeções e Checks', href: '/inspecoes', icon: ClipboardList, roles: ['Admin', 'Editor', 'Viewer'] },
+  { name: 'Boas Práticas', href: '/boas-praticas', icon: Lightbulb, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: 'Apadrinhamento', href: '/apadrinhamento', icon: UserPlus, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: 'Interações', href: '/interacoes', icon: MessageSquare, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: '3 P\'s', href: '/3ps', icon: ClipboardCheck, roles: ['Admin', 'Editor', 'Viewer'] },
