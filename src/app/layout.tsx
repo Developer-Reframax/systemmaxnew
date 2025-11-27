@@ -1,5 +1,6 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
+import { Suspense } from "react"
 import "./globals.css"
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
@@ -23,7 +24,9 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         <ThemeProvider>
           <AuthProvider>
-            <SessionTracker />
+            <Suspense fallback={null}>
+              <SessionTracker />
+            </Suspense>
             {children}
             <Toaster richColors position="top-right" />
           </AuthProvider>
