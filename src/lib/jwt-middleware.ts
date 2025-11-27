@@ -2,10 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import jwt from 'jsonwebtoken'
 import { createClient } from '@supabase/supabase-js'
 
-const isProd = process.env.NODE_ENV === 'production'
-const debugLog = (...args: unknown[]) => { if (!isProd) console.log(...args) }
-const debugError = (...args: unknown[]) => { if (!isProd) console.error(...args) }
-
 // Verificar se as variáveis de ambiente estão disponíveis
 const jwtSecret = process.env.JWT_SECRET || process.env.NEXT_PUBLIC_JWT_SECRET
 const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -14,15 +10,24 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.
 
 
 if (!jwtSecret) {
-  // Evitar logs detalhados em produção
-  if (!isProd) console.error('JWT_SECRET não encontrado nas variáveis de ambiente!')
-  throw new Error('JWT_SECRET é obrigatório')
+  throw new Error('JWT_SECRET e obrigatorio')
 }
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  if (!isProd) console.error('Variáveis do Supabase não encontradas!')
-  throw new Error('Configurações do Supabase são obrigatórias')
+  throw new Error('Configuracoes do Supabase sao obrigatorias')
 }
+
+const jwtSecretKey: jwt.Secret = jwtSecret
+
+type DecodedUserPayload = jwt.JwtPayload & {
+  matricula: string
+  nome: string
+  email: string
+  role: string
+  contrato_raiz?: string
+  equipe_id?: string
+}
+
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
@@ -61,12 +66,9 @@ export interface JWTVerificationResult {
 export async function verifyJWTToken(request: NextRequest): Promise<JWTVerificationResult> {
   try {
     cleanupTokenCache()
-    debugLog('JWT Middleware - Starting verification')
     const authHeader = request.headers.get('authorization')
-    debugLog('JWT Middleware - Auth header:', authHeader ? 'present' : 'missing')
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      debugLog('JWT Middleware - No valid auth header')
       return {
         success: false,
         error: 'Token de autorização não fornecido',
@@ -75,16 +77,14 @@ export async function verifyJWTToken(request: NextRequest): Promise<JWTVerificat
     }
 
     const token = authHeader.substring(7)
-    debugLog('JWT Middleware - Token extracted, length:', token.length)
 
     const cached = tokenCache.get(token)
-    let decoded: (jwt.JwtPayload & { matricula: string; nome: string; email: string; role: string; contrato_raiz?: string; equipe_id?: string }) | undefined
+    let decoded: DecodedUserPayload | undefined
     if (cached) {
       const now = Date.now()
       const ttlValid = now - cached.cachedAt < TOKEN_CACHE_TTL_MS
       const notExpired = cached.exp * 1000 > now
       if (ttlValid && notExpired) {
-        debugLog('JWT Middleware - Cache hit for token (skip jwt.verify, still checking Supabase)')
         decoded = {
           exp: cached.exp,
           matricula: cached.user.matricula,
@@ -93,7 +93,7 @@ export async function verifyJWTToken(request: NextRequest): Promise<JWTVerificat
           role: cached.user.role,
           contrato_raiz: cached.user.contrato_raiz,
           equipe_id: cached.user.equipe_id
-        } as jwt.JwtPayload & { matricula: string; nome: string; email: string; role: string; contrato_raiz?: string; equipe_id?: string }
+        }
       } else {
         tokenCache.delete(token)
       }
@@ -101,30 +101,44 @@ export async function verifyJWTToken(request: NextRequest): Promise<JWTVerificat
     
     // Verificar e decodificar JWT
     try {
-      if (decoded) {
-        // Já temos decoded do cache válido
-        debugLog('JWT Middleware - Using decoded from cache')
-      } else {
-      debugLog('JWT Middleware - Verifying token with secret:', !!jwtSecret)
-      
-      // Verificação adicional para garantir que jwtSecret não seja undefined
-      if (!jwtSecret) {
-        debugLog('JWT Middleware - JWT Secret not available')
-        return {
-          success: false,
-          error: 'Configuração de segurança não disponível',
-          status: 500
+      if (!decoded) {
+        const verified = jwt.verify(token, jwtSecretKey)
+        if (!verified || typeof verified !== 'object') {
+          return {
+            success: false,
+            error: 'Token invalido ou expirado',
+            status: 401
+          }
+        }
+
+        const payload = verified as jwt.JwtPayload
+        if (
+          payload.matricula === undefined ||
+          payload.nome === undefined ||
+          payload.email === undefined ||
+          payload.role === undefined
+        ) {
+          return {
+            success: false,
+            error: 'Token invalido ou expirado',
+            status: 401
+          }
+        }
+
+        decoded = {
+          matricula: String(payload.matricula),
+          nome: String(payload.nome),
+          email: String(payload.email),
+          role: String(payload.role),
+          contrato_raiz: payload.contrato_raiz as string | undefined,
+          equipe_id: payload.equipe_id as string | undefined,
+          exp: payload.exp
         }
       }
-      
-      decoded = jwt.verify(token, jwtSecret) as jwt.JwtPayload & { matricula: string; nome: string; email: string; role: string; contrato_raiz?: string; equipe_id?: string }
-      debugLog('JWT Middleware - Token verified successfully, user:', decoded.matricula)
-      }
-    } catch (jwtError) {
-      debugLog('JWT Middleware - Token verification failed:', jwtError)
+    } catch {
       return {
         success: false,
-        error: 'Token inválido ou expirado',
+        error: 'Token invalido ou expirado',
         status: 401
       }
     }
@@ -170,8 +184,7 @@ export async function verifyJWTToken(request: NextRequest): Promise<JWTVerificat
 
     return result
 
-  } catch (error) {
-    debugError('JWT verification error:', error)
+  } catch {
     return {
       success: false,
       error: 'Erro interno na verificação do token',
@@ -247,3 +260,7 @@ export function withAdminAuth(handler: (request: NextRequest, user: Authenticate
     return handler(request, authResult.user!)
   }
 }
+
+
+
+

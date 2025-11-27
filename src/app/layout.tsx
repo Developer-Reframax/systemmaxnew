@@ -4,6 +4,7 @@ import "./globals.css"
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { Toaster } from 'sonner'
+import SessionTracker from '@/components/SessionTracker'
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,6 +23,7 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         <ThemeProvider>
           <AuthProvider>
+            <SessionTracker />
             {children}
             <Toaster richColors position="top-right" />
           </AuthProvider>

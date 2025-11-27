@@ -48,13 +48,14 @@ export interface Contrato {
 }
 
 export interface Sessao {
-  id: number
-  usuario_id: number
-  modulo_id: number
-  inicio: string
-  fim?: string
-  created_at: string
-  updated_at?: string
+  id: string
+  matricula_usuario: number
+  inicio_sessao: string
+  fim_sessao?: string | null
+  paginas_acessadas?: number | null
+  modulos_acessados?: unknown[] | null
+  tempo_total_segundos?: number | null
+  created_at?: string
 }
 
 export interface Modulo {

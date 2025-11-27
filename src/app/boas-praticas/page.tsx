@@ -10,7 +10,6 @@ import {
   Lightbulb,
   Plus,
   TrendingUp,
-  Settings,
   FolderOpen,
   Target,
   Columns,
@@ -48,23 +47,23 @@ export default function BoasPraticasPage() {
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">Boas Praticas</h1>
-            <p className="text-gray-600">Gestao de melhorias e boas praticas da organizacao</p>
+            <h1 className="text-3xl font-bold text-gray-900">Boas Práticas - Lab Idéias</h1>
+            <p className="text-gray-600">Gestao de idéias e boas praticas da organizacao</p>
           </div>
           <div className="flex gap-2">
             <Button
-              variant="outline"
-              onClick={() => router.push('/boas-praticas/configuracoes')}
+              onClick={() => router.push('/boas-praticas')}
+              className='bg-green-600 hover:bg-green-700'
             >
-              <Settings className="w-4 h-4 mr-2" />
-              Configuracoes
+              <Plus className="w-4 h-4 mr-2" />
+              Nova idéia
             </Button>
             <Button
               onClick={() => router.push('/boas-praticas/novo')}
               className="bg-blue-600 hover:bg-blue-700"
             >
               <Plus className="w-4 h-4 mr-2" />
-              Nova Boa Pratica
+              Nova Boa Prática
             </Button>
           </div>
         </div>
@@ -73,7 +72,7 @@ export default function BoasPraticasPage() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="flex items-center justify-between">
-              <CardTitle className="text-sm font-medium">Total de Boas Praticas</CardTitle>
+              <CardTitle className="text-sm font-medium">Total de Boas Práticas</CardTitle>
               <Lightbulb className="w-4 h-4 text-yellow-600" />
             </CardHeader>
             <CardContent>
@@ -107,13 +106,13 @@ export default function BoasPraticasPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/boas-praticas/lista')}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Listar Boas Praticas</CardTitle>
+              <CardTitle className="text-sm font-medium">Listar Boas Práticas</CardTitle>
               <Lightbulb className="h-4 w-4 text-blue-600" />
             </CardHeader>
             <CardContent>
               <div className="text-lg font-bold">Visao geral</div>
               <p className="text-xs text-muted-foreground">
-                Lista global de boas praticas
+                Lista global de boas práticas
               </p>
             </CardContent>
           </Card>
@@ -126,7 +125,7 @@ export default function BoasPraticasPage() {
             <CardContent>
               <div className="text-lg font-bold">Meus cadastros</div>
               <p className="text-xs text-muted-foreground">
-                Praticas cadastradas por voce
+                Práticas cadastradas por voce
               </p>
             </CardContent>
           </Card>

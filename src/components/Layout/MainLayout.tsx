@@ -19,7 +19,6 @@ import {
   Mail,
   UserCheck,
   Activity,
-  BarChart3,
   User,
   AlertTriangle,
   Heart,
@@ -53,7 +52,7 @@ const menuItems: MenuItem[] = [
   { name: 'Equipes', href: '/teams', icon: UserCheck, roles: ['Admin', 'Editor'] },
   { name: 'Almoxarifado', href: '/almoxarifado', icon: Package, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: 'Inspeções e Checks', href: '/inspecoes', icon: ClipboardList, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Boas Práticas', href: '/boas-praticas', icon: Lightbulb, roles: ['Admin', 'Editor', 'Viewer'] },
+  { name: 'Boas Práticas / Lab idéias', href: '/boas-praticas', icon: Lightbulb, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: 'Apadrinhamento', href: '/apadrinhamento', icon: UserPlus, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: 'Interações', href: '/interacoes', icon: MessageSquare, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: '3 P\'s', href: '/3ps', icon: ClipboardCheck, roles: ['Admin', 'Editor', 'Viewer'] },
@@ -62,7 +61,6 @@ const menuItems: MenuItem[] = [
   { name: 'OAC', href: '/oac', icon: ClipboardCheck, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: 'Parametrização de Segurança', href: '/security-params', icon: Shield, roles: ['Admin', 'Editor'] },
   { name: 'Sessões', href: '/sessions', icon: Activity, roles: ['Admin'] },
-  { name: 'Relatórios', href: '/reports', icon: BarChart3, roles: ['Admin', 'Editor'] },
   { name: 'Configurações', href: '/settings', icon: Settings, roles: ['Admin'] },
 ]
 
@@ -72,6 +70,12 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const { theme, toggleTheme } = useTheme()
   const router = useRouter()
   const pathname = usePathname()
+
+  // Navegação centralizada para garantir transições client-side e fechamento da sidebar
+  const navigate = (href: string) => {
+    router.push(href)
+    setSidebarOpen(false)
+  }
 
   const handleLogout = async () => {
     await logout()
@@ -120,21 +124,24 @@ export default function MainLayout({ children }: MainLayoutProps) {
             {filteredMenuItems.map((item) => {
               const isActive = pathname === item.href
               return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors ${
-                    isActive
-                      ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
-                      : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
+              <Link
+                key={item.name}
+                href={item.href}
+                onClick={(e) => {
+                  e.preventDefault()
+                  navigate(item.href)
+                }}
+                className={`group flex items-center px-2 py-2 text-sm font-medium rounded-md transition-colors ${
+                  isActive
+                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+                    : 'text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 hover:text-gray-900 dark:hover:text-white'
                   }`}
-                  onClick={() => setSidebarOpen(false)}
-                >
-                  <item.icon className={`mr-3 h-5 w-5 ${
-                    isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'
-                  }`} />
-                  {item.name}
-                </Link>
+              >
+                <item.icon className={`mr-3 h-5 w-5 ${
+                  isActive ? 'text-blue-500' : 'text-gray-400 group-hover:text-gray-500 dark:group-hover:text-gray-300'
+                }`} />
+                {item.name}
+              </Link>
               )
             })}
           </div>
@@ -170,12 +177,13 @@ export default function MainLayout({ children }: MainLayoutProps) {
               )}
             </button>
             
-            <Link
-              href="/profile"
+            <button
+              type="button"
+              onClick={() => navigate('/profile')}
               className="flex-1 flex items-center justify-center px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors"
             >
               <User className="h-4 w-4" />
-            </Link>
+            </button>
             
             <button
               onClick={handleLogout}

@@ -1,111 +1,86 @@
 'use client'
 
 import React, { useState, useEffect, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
-import { supabase } from '@/lib/supabase'
 import {
   Users,
-  Building2,
-  Layers3,
   Activity,
-  TrendingUp,
-  Clock,
-  Shield
+  Shield,
+  FileWarning,
+  HeartPulse,
+  BookOpen,
+  Package
 } from 'lucide-react'
 import MainLayout from '@/components/Layout/MainLayout'
 
 interface DashboardStats {
   totalUsers: number
   activeUsers: number
-  totalContracts: number
-  activeContracts: number
-  totalModules: number
-  activeModules: number
-  todaySessions: number
-  activeSessions: number
+  totalDesvios: number
+  totalEmociogramas: number
+  totalBoasPraticas: number
 }
 
 interface RecentActivity {
   id: string
-  type: 'login' | 'logout' | 'module_access'
+  type: 'login' | 'logout' | 'module_access' | 'session'
   user_name: string
   description: string
   timestamp: string
 }
 
+interface DashboardResponse {
+  success: boolean
+  stats: DashboardStats
+  recentActivity: RecentActivity[]
+}
+
 export default function DashboardPage() {
-  const { user, hasRole } = useAuth()
+  const { user } = useAuth()
+  const router = useRouter()
   const [stats, setStats] = useState<DashboardStats>({
     totalUsers: 0,
     activeUsers: 0,
-    totalContracts: 0,
-    activeContracts: 0,
-    totalModules: 0,
-    activeModules: 0,
-    todaySessions: 0,
-    activeSessions: 0
+    totalDesvios: 0,
+    totalEmociogramas: 0,
+    totalBoasPraticas: 0
   })
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([])
   const [loading, setLoading] = useState(true)
 
+  // Busca indicadores e atividades via rota segura no backend
   const loadDashboardData = useCallback(async () => {
     try {
       setLoading(true)
-      
-      // Load statistics
-      const [usersData, contractsData, modulesData, sessionsData] = await Promise.all([
-        supabase.from('usuarios').select('status'),
-        supabase.from('contratos').select('status'),
-        supabase.from('modulos').select('ativo'),
-        supabase.from('sessoes').select('*').gte('inicio_sessao', new Date().toISOString().split('T')[0])
-      ])
-
-      const newStats: DashboardStats = {
-        totalUsers: usersData.data?.length || 0,
-        activeUsers: usersData.data?.filter(u => u.status === 'ativo').length || 0,
-        totalContracts: contractsData.data?.length || 0,
-        activeContracts: contractsData.data?.filter(c => c.status === 'ativo').length || 0,
-        totalModules: modulesData.data?.length || 0,
-        activeModules: modulesData.data?.filter(m => m.ativo).length || 0,
-        todaySessions: sessionsData.data?.length || 0,
-        activeSessions: sessionsData.data?.filter(s => !s.fim_sessao).length || 0
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      if (!token) {
+        return
       }
 
-      setStats(newStats)
-
-      // Load recent activity (mock data for now)
-      const mockActivity: RecentActivity[] = [
-        {
-          id: '1',
-          type: 'login',
-          user_name: user?.nome || 'Usuário',
-          description: 'Fez login no sistema',
-          timestamp: new Date().toISOString()
-        },
-        {
-          id: '2',
-          type: 'module_access',
-          user_name: 'João Silva',
-          description: 'Acessou o módulo de Gestão de Usuários',
-          timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString()
-        },
-        {
-          id: '3',
-          type: 'logout',
-          user_name: 'Maria Santos',
-          description: 'Fez logout do sistema',
-          timestamp: new Date(Date.now() - 60 * 60 * 1000).toISOString()
+      const response = await fetch('/api/dashboard/stats', {
+        headers: {
+          Authorization: `Bearer ${token}`
         }
-      ]
-      
-      setRecentActivity(mockActivity)
-      
+      })
+
+      if (!response.ok) {
+        throw new Error('Falha ao carregar indicadores')
+      }
+
+      const data: DashboardResponse = await response.json()
+      if (!data.success) {
+        throw new Error('Resposta inválida dos indicadores')
+      }
+
+      setStats(data.stats)
+      setRecentActivity(data.recentActivity)
     } catch (error) {
-      console.error('Error loading dashboard data:', error)
+      console.error('Erro ao carregar dashboard:', error)
     } finally {
       setLoading(false)
     }
-  }, [user?.nome])
+  }, [])
 
   useEffect(() => {
     loadDashboardData()
@@ -124,9 +99,9 @@ export default function DashboardPage() {
 
   const getActivityIcon = (type: string) => {
     switch (type) {
-      case 'login': return <TrendingUp className="h-4 w-4 text-green-500" />
-      case 'logout': return <Clock className="h-4 w-4 text-gray-500" />
-      case 'module_access': return <Layers3 className="h-4 w-4 text-blue-500" />
+      case 'login': return <Activity className="h-4 w-4 text-green-500" />
+      case 'logout': return <Activity className="h-4 w-4 text-gray-500" />
+      case 'module_access': return <Activity className="h-4 w-4 text-blue-500" />
       default: return <Activity className="h-4 w-4 text-gray-500" />
     }
   }
@@ -140,6 +115,15 @@ export default function DashboardPage() {
       </MainLayout>
     )
   }
+
+  const quickActions = [
+    { href: '/boas-praticas', label: 'Boas Práticas', icon: <BookOpen className="h-6 w-6 text-purple-600" /> },
+    { href: '/desvios', label: 'Relatos / Desvios', icon: <FileWarning className="h-6 w-6 text-orange-600" /> },
+    { href: '/emociograma', label: 'Emociograma', icon: <HeartPulse className="h-6 w-6 text-red-500" /> },
+    { href: '/inspecoes', label: 'Inspeções', icon: <Activity className="h-6 w-6 text-blue-600" /> },
+    { href: '/users', label: 'Usuários', icon: <Users className="h-6 w-6 text-green-600" /> },
+    { href: '/almoxarifado', label: 'Almoxarifado', icon: <Package className="h-6 w-6 text-indigo-600" /> }
+  ]
 
   return (
     <MainLayout>
@@ -189,7 +173,7 @@ export default function DashboardPage() {
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 <span className="font-medium text-green-600 dark:text-green-400">
                   {stats.activeUsers}
-                </span> ativos
+                </span> ativos na plataforma
               </div>
             </div>
           </div>
@@ -198,19 +182,16 @@ export default function DashboardPage() {
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <Building2 className="h-6 w-6 text-green-600" />
+                  <FileWarning className="h-6 w-6 text-orange-600" />
                 </div>
                 <div className="ml-5 w-0 flex-1">
                   <dl>
                     <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                      Contratos
+                      Relatos/Desvios
                     </dt>
                     <dd className="flex items-baseline">
                       <div className="text-2xl font-semibold text-gray-900 dark:text-white">
-                        {stats.activeContracts}
-                      </div>
-                      <div className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                        / {stats.totalContracts}
+                        {stats.totalDesvios}
                       </div>
                     </dd>
                   </dl>
@@ -220,8 +201,8 @@ export default function DashboardPage() {
             <div className="bg-gray-50 dark:bg-gray-700 px-5 py-3">
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 <span className="font-medium text-green-600 dark:text-green-400">
-                  {stats.activeContracts}
-                </span> ativos
+                  {stats.totalDesvios}
+                </span> registros no seu contrato
               </div>
             </div>
           </div>
@@ -230,19 +211,16 @@ export default function DashboardPage() {
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <Layers3 className="h-6 w-6 text-purple-600" />
+                  <HeartPulse className="h-6 w-6 text-red-500" />
                 </div>
                 <div className="ml-5 w-0 flex-1">
                   <dl>
                     <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                      Módulos
+                      Emociograma
                     </dt>
                     <dd className="flex items-baseline">
                       <div className="text-2xl font-semibold text-gray-900 dark:text-white">
-                        {stats.activeModules}
-                      </div>
-                      <div className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                        / {stats.totalModules}
+                        {stats.totalEmociogramas}
                       </div>
                     </dd>
                   </dl>
@@ -252,8 +230,8 @@ export default function DashboardPage() {
             <div className="bg-gray-50 dark:bg-gray-700 px-5 py-3">
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 <span className="font-medium text-green-600 dark:text-green-400">
-                  {stats.activeModules}
-                </span> ativos
+                  {stats.totalEmociogramas}
+                </span> registros do seu contrato
               </div>
             </div>
           </div>
@@ -262,19 +240,16 @@ export default function DashboardPage() {
             <div className="p-5">
               <div className="flex items-center">
                 <div className="flex-shrink-0">
-                  <Activity className="h-6 w-6 text-orange-600" />
+                  <BookOpen className="h-6 w-6 text-purple-600" />
                 </div>
                 <div className="ml-5 w-0 flex-1">
                   <dl>
                     <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">
-                      Sessões Hoje
+                      Boas Práticas
                     </dt>
                     <dd className="flex items-baseline">
                       <div className="text-2xl font-semibold text-gray-900 dark:text-white">
-                        {stats.activeSessions}
-                      </div>
-                      <div className="ml-2 text-sm text-gray-500 dark:text-gray-400">
-                        / {stats.todaySessions}
+                        {stats.totalBoasPraticas}
                       </div>
                     </dd>
                   </dl>
@@ -284,8 +259,8 @@ export default function DashboardPage() {
             <div className="bg-gray-50 dark:bg-gray-700 px-5 py-3">
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 <span className="font-medium text-green-600 dark:text-green-400">
-                  {stats.activeSessions}
-                </span> ativas
+                  {stats.totalBoasPraticas}
+                </span> práticas cadastradas (contrato)
               </div>
             </div>
           </div>
@@ -321,46 +296,26 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick Actions */}
-        {hasRole(['Admin', 'Editor']) && (
-          <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
-              Ações Rápidas
-            </h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {hasRole('Admin') && (
-                <a
-                  href="/users"
-                  className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-                >
-                  <Users className="h-6 w-6 text-blue-600 mr-3" />
-                  <span className="text-sm font-medium text-gray-900 dark:text-white">
-                    Gerenciar Usuários
-                  </span>
-                </a>
-              )}
-              
-              <a
-                href="/contracts"
-                className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">
+            Ações Rápidas
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {quickActions.map((action) => (
+              <button
+                key={action.href}
+                type="button"
+                onClick={() => router.push(action.href)}
+                className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors w-full text-left"
               >
-                <Building2 className="h-6 w-6 text-green-600 mr-3" />
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  Gerenciar Contratos
+                {action.icon}
+                <span className="text-sm font-medium text-gray-900 dark:text-white ml-3">
+                  {action.label}
                 </span>
-              </a>
-              
-              <a
-                href="/reports"
-                className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-              >
-                <Activity className="h-6 w-6 text-purple-600 mr-3" />
-                <span className="text-sm font-medium text-gray-900 dark:text-white">
-                  Ver Relatórios
-                </span>
-              </a>
-            </div>
+              </button>
+            ))}
           </div>
-        )}
+        </div>
       </div>
     </MainLayout>
   )
