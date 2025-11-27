@@ -1,155 +1,132 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyToken } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
+import { verifyJWTToken } from '@/lib/jwt-middleware'
 
-// Interfaces para tipagem
-interface UserSession {
-  usuario_id: string
-  usuario: { nome: string } | { nome: string }[]
-}
-
-interface ModuleSession {
-  modulo_id: string
-  modulo: { nome: string } | { nome: string }[]
-}
-
-interface UserCount {
+interface CountItem {
   nome: string
   sessions: number
 }
 
-interface ModuleCount {
-  nome: string
-  sessions: number
+interface SessionRow {
+  matricula_usuario: number
+  inicio_sessao: string
+  fim_sessao: string | null
+  tempo_total_segundos: number | null
+  paginas_acessadas: number | null
+  modulos_acessados: { type?: string; path?: string; occurred_at?: string }[] | null
+  usuario?: { nome?: string; matricula?: number } | { nome?: string; matricula?: number }[]
 }
 
 const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - Buscar estatísticas de sessões
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 })
+    const authResult = await verifyJWTToken(request)
+    if (!authResult.success || !authResult.user) {
+      return NextResponse.json(
+        { success: false, message: authResult.error },
+        { status: authResult.status || 401 }
+      )
     }
 
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    
-    if (!decoded) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
-    }
-
-    // Verificar se é admin ou editor
-    if (decoded.role !== 'Admin' && decoded.role !== 'Editor') {
-      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    if (!['Admin', 'Editor'].includes(authResult.user.role)) {
+      return NextResponse.json(
+        { success: false, message: 'Acesso negado' },
+        { status: 403 }
+      )
     }
 
     const { searchParams } = new URL(request.url)
     const start = searchParams.get('start')
     const end = searchParams.get('end')
 
-    // Total sessions
-    let totalQuery = supabase
-      .from('sessoes')
-      .select('*', { count: 'exact', head: true })
-    
-    if (start) totalQuery = totalQuery.gte('inicio', start)
-    if (end) totalQuery = totalQuery.lte('inicio', end)
-    
-    const { count: totalSessions } = await totalQuery
+    let baseQuery = supabase.from('sessoes').select(`
+      matricula_usuario,
+      inicio_sessao,
+      fim_sessao,
+      tempo_total_segundos,
+      paginas_acessadas,
+      modulos_acessados,
+      usuario:usuarios(nome, matricula)
+    `)
 
-    // Active sessions (no end time)
-    const { count: activeSessions } = await supabase
-      .from('sessoes')
-      .select('*', { count: 'exact', head: true })
-      .is('fim', null)
+    if (start) baseQuery = baseQuery.gte('inicio_sessao', start)
+    if (end) baseQuery = baseQuery.lte('inicio_sessao', end)
 
-    // Sessions with duration for average calculation
-    let completedQuery = supabase
-      .from('sessoes')
-      .select('inicio, fim')
-      .not('fim', 'is', null)
-    
-    if (start) completedQuery = completedQuery.gte('inicio', start)
-    if (end) completedQuery = completedQuery.lte('inicio', end)
-    
-    const { data: completedSessions } = await completedQuery
+    const [sessionsResult, activeResult] = await Promise.all([
+      baseQuery,
+      supabase
+        .from('sessoes')
+        .select('*', { head: true, count: 'exact' })
+        .is('fim_sessao', null)
+    ])
+
+    if (sessionsResult.error) {
+      console.error('Erro ao buscar estatísticas de sessões:', sessionsResult.error)
+      return NextResponse.json({ success: false, message: 'Erro ao buscar estatísticas' }, { status: 500 })
+    }
+
+    const sessions = (sessionsResult.data || []) as SessionRow[]
+    const activeSessions = activeResult.count || 0
+    const totalSessions = sessions.length || 0
 
     let averageDuration = 0
-    if (completedSessions && completedSessions.length > 0) {
-      const totalDuration = completedSessions.reduce((acc, session) => {
-        const startTime = new Date(session.inicio).getTime()
-        const endTime = new Date(session.fim).getTime()
-        return acc + (endTime - startTime)
-      }, 0)
-      averageDuration = totalDuration / completedSessions.length / (1000 * 60) // Convert to minutes
-    }
+    let averagePages = 0
+    const userCounts: Record<string, CountItem> = {}
+    const pageCounts: Record<string, CountItem> = {}
 
-    // Top users
-    let userStatsQuery = supabase
-      .from('sessoes')
-      .select(`
-        usuario_id,
-        usuario:usuarios(nome)
-      `)
-    
-    if (start) userStatsQuery = userStatsQuery.gte('inicio', start)
-    if (end) userStatsQuery = userStatsQuery.lte('inicio', end)
-    
-    const { data: userStats } = await userStatsQuery
+    sessions.forEach((session: SessionRow) => {
+      const durationSeconds = session.fim_sessao
+        ? Math.max(
+            0,
+            Math.floor(
+              (new Date(session.fim_sessao).getTime() - new Date(session.inicio_sessao).getTime()) / 1000
+            )
+          )
+        : session.tempo_total_segundos || 0
 
-    const userCounts = userStats?.reduce((acc: Record<string, UserCount>, session: UserSession) => {
-      const userId = session.usuario_id
-      const userName = Array.isArray(session.usuario) ? session.usuario[0]?.nome : session.usuario?.nome || 'Usuário Desconhecido'
-      acc[userId] = acc[userId] || { nome: userName, sessions: 0 }
-      acc[userId].sessions++
-      return acc
-    }, {}) || {}
+      averageDuration += durationSeconds
+      averagePages += session.paginas_acessadas || 0
 
-    const topUsers = Object.values(userCounts)
-      .sort((a: UserCount, b: UserCount) => b.sessions - a.sessions)
-      .slice(0, 5)
+      const userName = Array.isArray(session.usuario)
+        ? session.usuario[0]?.nome
+        : session.usuario?.nome
 
-    // Top modules
-    let moduleStatsQuery = supabase
-      .from('sessoes')
-      .select(`
-        modulo_id,
-        modulo:modulos(nome)
-      `)
-    
-    if (start) moduleStatsQuery = moduleStatsQuery.gte('inicio', start)
-    if (end) moduleStatsQuery = moduleStatsQuery.lte('inicio', end)
-    
-    const { data: moduleStats } = await moduleStatsQuery
+      const userKey = session.matricula_usuario.toString()
+      if (!userCounts[userKey]) {
+        userCounts[userKey] = { nome: userName || 'Usuário', sessions: 0 }
+      }
+      userCounts[userKey].sessions += 1
 
-    const moduleCounts = moduleStats?.reduce((acc: Record<string, ModuleCount>, session: ModuleSession) => {
-      const moduleId = session.modulo_id
-      const moduleName = Array.isArray(session.modulo) ? session.modulo[0]?.nome : session.modulo?.nome || 'Módulo Desconhecido'
-      acc[moduleId] = acc[moduleId] || { nome: moduleName, sessions: 0 }
-      acc[moduleId].sessions++
-      return acc
-    }, {}) || {}
+      const events = Array.isArray(session.modulos_acessados) ? session.modulos_acessados : []
+      events
+        .filter((evt) => evt.type === 'page_view')
+        .forEach((evt) => {
+          const path = evt.path || 'desconhecido'
+          if (!pageCounts[path]) {
+            pageCounts[path] = { nome: path, sessions: 0 }
+          }
+          pageCounts[path].sessions += 1
+        })
+    })
 
-    const topModules = Object.values(moduleCounts)
-      .sort((a: ModuleCount, b: ModuleCount) => b.sessions - a.sessions)
-      .slice(0, 5)
+    const topUsers = Object.values(userCounts).sort((a, b) => b.sessions - a.sessions).slice(0, 5)
+    const topModules = Object.values(pageCounts).sort((a, b) => b.sessions - a.sessions).slice(0, 5)
 
-    const stats = {
-      totalSessions: totalSessions || 0,
-      activeSessions: activeSessions || 0,
-      averageDuration,
-      topUsers: topUsers as UserCount[],
-      topModules: topModules as ModuleCount[]
-    }
-
-    return NextResponse.json(stats)
+    return NextResponse.json({
+      success: true,
+      totalSessions,
+      activeSessions,
+      averageDuration: totalSessions ? averageDuration / totalSessions / 60 : 0,
+      averagePages: totalSessions ? averagePages / totalSessions : 0,
+      topUsers,
+      topModules
+    })
   } catch (error) {
     console.error('Erro na API de estatísticas de sessões:', error)
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
+    return NextResponse.json({ success: false, message: 'Erro interno do servidor' }, { status: 500 })
   }
 }

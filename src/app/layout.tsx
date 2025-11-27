@@ -1,9 +1,11 @@
 import type { Metadata } from "next"
 import { Inter } from "next/font/google"
+import { Suspense } from "react"
 import "./globals.css"
 import { AuthProvider } from '@/contexts/AuthContext'
 import { ThemeProvider } from '@/contexts/ThemeContext'
 import { Toaster } from 'sonner'
+import SessionTracker from '@/components/SessionTracker'
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,6 +24,9 @@ export default function RootLayout({
       <body className={`${inter.className} antialiased`}>
         <ThemeProvider>
           <AuthProvider>
+            <Suspense fallback={null}>
+              <SessionTracker />
+            </Suspense>
             {children}
             <Toaster richColors position="top-right" />
           </AuthProvider>

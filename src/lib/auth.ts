@@ -5,9 +5,6 @@ import type { Usuario } from './supabase'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key'
 
-const isProd = process.env.NODE_ENV === 'production'
-const debugLog = (...args: unknown[]) => { if (!isProd) console.log(...args) }
-// Removendo debugError não utilizado para evitar warning
 
 export interface AuthUser {
   matricula: number
@@ -61,32 +58,31 @@ export function generateToken(user: AuthUser): string {
 
 // Verify JWT token
 export function verifyToken(token: string): AuthUser | null {
+  if (!token || !JWT_SECRET) {
+    return null
+  }
+
   try {
-    debugLog('🔍 verifyToken - Iniciando verificação do token')
-    debugLog('🔑 JWT_SECRET disponível:', !!JWT_SECRET)
-    debugLog('📝 Token recebido (primeiros 50 chars):', token.substring(0, 50) + '...')
-    
-    if (!token) {
-      debugLog('❌ Token vazio ou undefined')
+    const decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload & {
+      matricula?: number
+      nome?: string
+      email?: string
+      role?: AuthUser['role']
+      funcao?: string
+      contrato_raiz?: string
+      tipo?: string
+    }
+
+    if (
+      decoded.matricula === undefined ||
+      decoded.nome === undefined ||
+      decoded.email === undefined ||
+      decoded.role === undefined
+    ) {
       return null
     }
-    
-    if (!JWT_SECRET) {
-      debugLog('❌ JWT_SECRET não está definido')
-      return null
-    }
-    
-    debugLog('🔓 Tentando decodificar token com jwt.verify...')
-    const decoded = jwt.verify(token, JWT_SECRET) as unknown as Record<string, unknown>
-    debugLog('✅ Token decodificado com sucesso:', {
-      matricula: decoded.matricula,
-      nome: decoded.nome,
-      email: decoded.email,
-      role: decoded.role,
-      exp: decoded.exp ? new Date(Number(decoded.exp) * 1000).toLocaleString() : 'N/A'
-    })
-    
-    const authUser = {
+
+    return {
       matricula: decoded.matricula,
       nome: decoded.nome,
       email: decoded.email,
@@ -95,40 +91,7 @@ export function verifyToken(token: string): AuthUser | null {
       contrato_raiz: decoded.contrato_raiz,
       tipo: decoded.tipo
     }
-    
-    debugLog('👤 AuthUser criado:', authUser)
-    debugLog('🏢 contrato_raiz no decoded:', decoded.contrato_raiz)
-    debugLog('🏢 contrato_raiz no authUser:', authUser.contrato_raiz)
-    debugLog('🔍 Campos do decoded:', Object.keys(decoded))
-    return {
-      matricula: decoded.matricula as number,
-      nome: decoded.nome as string,
-      email: decoded.email as string,
-      role: decoded.role as 'Admin' | 'Editor' | 'Usuario',
-      funcao: decoded.funcao as string | undefined,
-      contrato_raiz: decoded.contrato_raiz as string | undefined,
-      tipo: decoded.tipo as string | undefined
-    }
-    
-  } catch (error) {
-    debugLog('❌ Erro na verificação do token:')
-    
-    if (error instanceof Error) {
-      debugLog('📋 Tipo do erro:', error.constructor.name)
-      debugLog('💬 Mensagem do erro:', error.message)
-      debugLog('🔍 Stack trace:', error.stack)
-      
-      if (error.name === 'TokenExpiredError') {
-        debugLog('⏰ Token expirado em:', new Date((error as unknown as { expiredAt: Date }).expiredAt).toLocaleString())
-      } else if (error.name === 'JsonWebTokenError') {
-        debugLog('🚫 Token inválido ou malformado')
-      } else if (error.name === 'NotBeforeError') {
-        debugLog('⏳ Token ainda não é válido')
-      }
-    } else {
-      debugLog('💬 Erro desconhecido:', String(error))
-    }
-    
+  } catch {
     return null
   }
 }
@@ -310,3 +273,6 @@ export async function updatePassword(matricula: number, newPassword: string): Pr
     }
   }
 }
+
+
+

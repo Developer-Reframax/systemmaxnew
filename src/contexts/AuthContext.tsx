@@ -7,6 +7,14 @@ import type { AuthContextType, AuthProviderProps } from '@/lib/types/auth'
 import { hasRole, isAuthenticated, checkVerificationComplete } from '@/lib/auth-utils'
 import { useVerification } from '@/hooks/useVerification'
 import TermsModal from '@/components/TermsModal'
+import {
+  clearStoredSession,
+  endSpecificSession,
+  endUserSession,
+  startUserSession,
+  SESSION_STORAGE_KEY,
+  LAST_SESSION_KEY
+} from '@/lib/session-tracker'
 import { AuthContext } from './AuthContextDefinition'
 
 export function AuthProvider({ children }: AuthProviderProps) {
@@ -31,6 +39,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
         return
       }
 
+      const hasSession = typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_STORAGE_KEY) : null
+      if (!hasSession) {
+        const staleSessionId = typeof window !== 'undefined' ? localStorage.getItem(LAST_SESSION_KEY) : null
+        if (staleSessionId) {
+          await endSpecificSession(staleSessionId, 'stale')
+        }
+        clearStoredSession()
+        localStorage.removeItem('auth_token')
+        setUser(null)
+        setLoading(false)
+        return
+      }
+
       // Verificações em paralelo: expiração local, verificação no servidor e decodificação
       const [expired, userData] = await Promise.all([
         Promise.resolve(isTokenExpired(token)),
@@ -39,6 +60,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (expired) {
         localStorage.removeItem('auth_token')
+        clearStoredSession()
         setUser(null)
         setLoading(false)
         return
@@ -46,7 +68,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
       if (userData) {
         setUser(userData)
-        // Iniciar verificação de termos imediatamente sem setTimeout
         startVerification()
       } else {
         // Fallback: se a verificação falhar mas o token ainda tiver exp futuro, podemos decodificar para UX mínima
@@ -64,6 +85,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           startVerification()
         } else {
           localStorage.removeItem('auth_token')
+          clearStoredSession()
           setUser(null)
         }
       }
@@ -81,6 +103,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
       if (shouldForceRelogin === 'true') {
         localStorage.removeItem('force_relogin')
         localStorage.removeItem('auth_token')
+        clearStoredSession()
         setUser(null)
         window.location.reload()
       }
@@ -92,7 +115,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
     try {
       setLoading(true)
 
-      
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -107,36 +129,17 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
         setUser(data.user)
         localStorage.setItem('auth_token', data.token)
-        
-        // Create session record
-        try {
-          await fetch('/api/auth/session', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'Authorization': `Bearer ${data.token}`
-            },
-            body: JSON.stringify({
-              matricula_usuario: data.user.matricula,
-              inicio_sessao: new Date().toISOString(),
-              paginas_acessadas: 1,
-              modulos_acessados: ['Login']
-            })
-          })
-        } catch (sessionError) {
-          console.warn('Erro ao criar sessão:', sessionError)
-        }
-        
-        // Iniciar verificação de termos após login bem-sucedido
-        setTimeout(() => {
-          startVerification()
-        }, 500)
-        
-        return { success: true, message: data.message }
-      } else {
 
-        return { success: false, message: data.message || 'Erro no login' }
+        const currentPath = typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search
+          : '/'
+        await startUserSession(currentPath)
+
+        startVerification()
+        return { success: true, message: data.message }
       }
+
+      return { success: false, message: data.message || 'Erro no login' }
     } catch (error) {
       console.error('Erro no login:', error)
       return { success: false, message: 'Erro interno do servidor' }
@@ -147,27 +150,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const logout = async () => {
 
-    
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (user && token) {
-        await fetch('/api/auth/logout', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({
-            matricula_usuario: user.matricula,
-            fim_sessao: new Date().toISOString()
-          })
-        })
-      }
+      await endUserSession('logout')
     } catch (error) {
-      console.error('Erro no logout:', error)
+      console.error('Erro ao finalizar sessão:', error)
     }
 
     setUser(null)
+    clearStoredSession()
     localStorage.removeItem('auth_token')
 
   }

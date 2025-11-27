@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import MainLayout from '@/components/Layout/MainLayout';
@@ -884,6 +884,7 @@ function ExecutarFormularioPage() {
   const etapaIndex = etapas.indexOf(etapaAtual);
 
   return (
+    <Suspense fallback={<div className="p-6 text-center text-gray-600">Carregando inspeção...</div>}>
     <MainLayout>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
@@ -1326,6 +1327,7 @@ function ExecutarFormularioPage() {
         </div>
       </div>
     </MainLayout>
+    </Suspense>
   );
 }
 
