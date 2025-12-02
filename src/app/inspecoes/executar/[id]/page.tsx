@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useState, useEffect, useCallback, useMemo, Suspense } from 'react';
 import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import MainLayout from '@/components/Layout/MainLayout';
@@ -32,6 +32,7 @@ interface Formulario {
   id: string;
   titulo: string;
   descricao: string;
+  check_list: boolean;
   categoria: {
     nome: string;
     cor: string;
@@ -47,6 +48,7 @@ interface Pergunta {
   permite_conforme: boolean;
   permite_nao_conforme: boolean;
   permite_nao_aplica: boolean;
+  impeditivo?: boolean;
 }
 
 interface Local {
@@ -75,6 +77,7 @@ interface ExecucaoData {
   local_id: string;
   data_inicio: string;
   participantes: string[];
+  equipamento_tag: string;
   respostas: Resposta[];
 }
 
@@ -106,6 +109,7 @@ function ExecutarFormularioPage() {
   const [formularioLoading, setFormularioLoading] = useState(true);
   const [locaisLoading, setLocaisLoading] = useState(true);
   const [execucaoLoading, setExecucaoLoading] = useState<boolean>(!!searchParams?.get('execucao_id'));
+  const [equipamentosLoading, setEquipamentosLoading] = useState(false);
   
   // Variáveis para controlar se estamos continuando uma execução existente
   const execucaoId = searchParams?.get('execucao_id');
@@ -113,10 +117,13 @@ function ExecutarFormularioPage() {
   const [execucaoCriadaId, setExecucaoCriadaId] = useState<string>('');
   const [tentativaCriacaoParaLocal, setTentativaCriacaoParaLocal] = useState<string>('');
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
+  const [equipamentos, setEquipamentos] = useState<{ id: string; tag: string; nome: string }[]>([]);
+  const [equipamentoSearch, setEquipamentoSearch] = useState('');
   
   const [execucaoData, setExecucaoData] = useState<ExecucaoData>({
     local_id: '',
     data_inicio: new Date().toISOString(),
+    equipamento_tag: '',
     participantes: [],
     respostas: []
   });
@@ -127,6 +134,14 @@ function ExecutarFormularioPage() {
   const [planoModalOpen, setPlanoModalOpen] = useState(false);
   const [perguntaIdCriandoPlano, setPerguntaIdCriandoPlano] = useState<string | undefined>(undefined);
   const [planosExistentes, setPlanosExistentes] = useState<PlanoAcaoWithRelations[]>([]);
+  const existeImpeditivaNaoConforme = useMemo(() => {
+    if (!formulario?.check_list) return false;
+    return execucaoData.respostas.some((resposta) => {
+      if (resposta.valor !== 'nao_conforme') return false;
+      const pergunta = formulario.perguntas.find(p => p.id === resposta.pergunta_id);
+      return pergunta?.impeditivo;
+    });
+  }, [execucaoData.respostas, formulario]);
 
   // Removido: checagem agregada de existência de planos (estado não utilizado)
 
@@ -191,6 +206,7 @@ function ExecutarFormularioPage() {
         formulario_id: params.id,
         local_id: execucaoData.local_id,
         data_inicio: execucaoData.data_inicio,
+        equipamento_tag: execucaoData.equipamento_tag || undefined,
         status: 'em_andamento'
       });
 
@@ -204,6 +220,7 @@ function ExecutarFormularioPage() {
           formulario_id: params.id,
           local_id: execucaoData.local_id,
           data_inicio: execucaoData.data_inicio,
+          equipamento_tag: execucaoData.equipamento_tag || null,
           status: 'em_andamento'
         }),
       });
@@ -246,7 +263,7 @@ function ExecutarFormularioPage() {
       toast.error('Erro ao iniciar execução');
       return null;
     }
-  }, [params?.id, execucaoData.local_id, execucaoData.data_inicio]);
+  }, [params?.id, execucaoData.local_id, execucaoData.data_inicio, execucaoData.equipamento_tag]);
 
   const fetchFormulario = useCallback(async () => {
     try {
@@ -271,7 +288,14 @@ function ExecutarFormularioPage() {
       }
 
       const data = await response.json();
-      setFormulario(data.data);
+      setFormulario({
+        ...data.data,
+        check_list: data.data?.check_list ?? false,
+        perguntas: (data.data?.perguntas || []).map((p: Pergunta) => ({
+          ...p,
+          impeditivo: p.impeditivo ?? false,
+        })),
+      });
       
       // Inicializar respostas sem seleção prévia
       const respostasIniciais = data.data.perguntas.map((pergunta: Pergunta) => ({
@@ -352,6 +376,31 @@ function ExecutarFormularioPage() {
     }
   }, [searchUsuarios]);
 
+  const fetchEquipamentos = useCallback(async () => {
+    if (!formulario?.check_list) return;
+    try {
+      setEquipamentosLoading(true);
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      const params = new URLSearchParams();
+      if (equipamentoSearch) params.append('search', equipamentoSearch);
+
+      const response = await fetch(`/api/inspecoes/equipamentos?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setEquipamentos(data.data || []);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar equipamentos:', error);
+    } finally {
+      setEquipamentosLoading(false);
+    }
+  }, [equipamentoSearch, formulario?.check_list]);
+
   const fetchExecucaoExistente = useCallback(async () => {
     if (!execucaoId) return;
     
@@ -379,6 +428,7 @@ function ExecutarFormularioPage() {
         ...prev,
         local_id: execucao.local.id,
         data_inicio: execucao.data_inicio || prev.data_inicio,
+        equipamento_tag: execucao.equipamento_tag || prev.equipamento_tag || '',
         participantes: execucao.participantes.map((p: ParticipanteExecucao) => p.matricula_participante),
         respostas: execucao.respostas.map((r: RespostaExecucao) => ({
           pergunta_id: r.pergunta_id,
@@ -415,16 +465,29 @@ function ExecutarFormularioPage() {
     fetchUsuarios();
   }, [fetchUsuarios]);
 
+  useEffect(() => {
+    fetchEquipamentos();
+  }, [fetchEquipamentos]);
+
   // Atualizar estado de loading com base nas flags
   useEffect(() => {
-    setLoading(formularioLoading || locaisLoading || (execucaoId ? execucaoLoading : false));
-  }, [formularioLoading, locaisLoading, execucaoLoading, execucaoId]);
+    setLoading(
+      formularioLoading ||
+        locaisLoading ||
+        equipamentosLoading ||
+        (execucaoId ? execucaoLoading : false)
+    );
+  }, [formularioLoading, locaisLoading, equipamentosLoading, execucaoLoading, execucaoId]);
 
   const proximaEtapa = async () => {
     switch (etapaAtual) {
       case 'local':
         if (!execucaoData.local_id) {
           toast.error('Selecione um local para continuar');
+          return;
+        }
+        if (formulario?.check_list && !execucaoData.equipamento_tag) {
+          toast.error('Selecione a tag do equipamento para continuar');
           return;
         }
         setEtapaAtual('participantes');
@@ -558,6 +621,7 @@ function ExecutarFormularioPage() {
         body: JSON.stringify({
           local_id: execucaoData.local_id,
           data_inicio: execucaoData.data_inicio,
+          equipamento_tag: execucaoData.equipamento_tag || null,
           participantes: execucaoData.participantes,
           respostas: execucaoData.respostas.map(r => ({
             pergunta_id: r.pergunta_id,
@@ -648,14 +712,15 @@ function ExecutarFormularioPage() {
              'Authorization': `Bearer ${token}`,
              'Content-Type': 'application/json',
            },
-           body: JSON.stringify({
-             local_id: execucaoData.local_id,
-             data_inicio: execucaoData.data_inicio,
-             participantes: execucaoData.participantes,
-             respostas: execucaoData.respostas.map(r => ({
-               pergunta_id: r.pergunta_id,
-               resposta: r.valor,
-               observacoes: r.observacao || null
+          body: JSON.stringify({
+            local_id: execucaoData.local_id,
+            data_inicio: execucaoData.data_inicio,
+            equipamento_tag: execucaoData.equipamento_tag || null,
+            participantes: execucaoData.participantes,
+            respostas: execucaoData.respostas.map(r => ({
+              pergunta_id: r.pergunta_id,
+              resposta: r.valor,
+              observacoes: r.observacao || null
              })),
              status: 'em_andamento'
            }),
@@ -668,15 +733,16 @@ function ExecutarFormularioPage() {
              'Authorization': `Bearer ${token}`,
              'Content-Type': 'application/json',
            },
-           body: JSON.stringify({
-             formulario_id: params?.id,
-             local_id: execucaoData.local_id,
-             data_inicio: execucaoData.data_inicio,
-             participantes: execucaoData.participantes,
-             respostas: execucaoData.respostas.map(r => ({
-               pergunta_id: r.pergunta_id,
-               resposta: r.valor,
-               observacoes: r.observacao || null
+          body: JSON.stringify({
+            formulario_id: params?.id,
+            local_id: execucaoData.local_id,
+            data_inicio: execucaoData.data_inicio,
+            equipamento_tag: execucaoData.equipamento_tag || null,
+            participantes: execucaoData.participantes,
+            respostas: execucaoData.respostas.map(r => ({
+              pergunta_id: r.pergunta_id,
+              resposta: r.valor,
+              observacoes: r.observacao || null
              })),
              status: 'em_andamento'
            }),
@@ -763,14 +829,15 @@ function ExecutarFormularioPage() {
              'Authorization': `Bearer ${token}`,
              'Content-Type': 'application/json',
            },
-           body: JSON.stringify({
-             local_id: execucaoData.local_id,
-             data_inicio: execucaoData.data_inicio,
-             participantes: execucaoData.participantes,
-             respostas: execucaoData.respostas.map(r => ({
-               pergunta_id: r.pergunta_id,
-               resposta: r.valor,
-               observacoes: r.observacao || null
+          body: JSON.stringify({
+            local_id: execucaoData.local_id,
+            data_inicio: execucaoData.data_inicio,
+            equipamento_tag: execucaoData.equipamento_tag || null,
+            participantes: execucaoData.participantes,
+            respostas: execucaoData.respostas.map(r => ({
+              pergunta_id: r.pergunta_id,
+              resposta: r.valor,
+              observacoes: r.observacao || null
              })),
              status: 'concluida',
              concluir: true
@@ -785,14 +852,15 @@ function ExecutarFormularioPage() {
              'Content-Type': 'application/json',
            },
            body: JSON.stringify({
-             formulario_id: params?.id,
-             local_id: execucaoData.local_id,
-             data_inicio: execucaoData.data_inicio,
-             participantes: execucaoData.participantes,
-             respostas: execucaoData.respostas.map(r => ({
-               pergunta_id: r.pergunta_id,
-               resposta: r.valor,
-               observacoes: r.observacao || null
+            formulario_id: params?.id,
+            local_id: execucaoData.local_id,
+            data_inicio: execucaoData.data_inicio,
+            equipamento_tag: execucaoData.equipamento_tag || null,
+            participantes: execucaoData.participantes,
+            respostas: execucaoData.respostas.map(r => ({
+              pergunta_id: r.pergunta_id,
+              resposta: r.valor,
+              observacoes: r.observacao || null
              })),
              status: 'concluida'
            }),
@@ -960,6 +1028,37 @@ function ExecutarFormularioPage() {
                    ))}
                  </select>
                </div>
+
+              {formulario?.check_list && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">
+                    Tag do equipamento <span className="text-red-500">*</span>
+                  </label>
+                  <div className="relative">
+                    <Input
+                      list="equipamentos-options"
+                        placeholder="Selecione ou digite para filtrar..."
+                        value={execucaoData.equipamento_tag}
+                        onChange={(e) => {
+                          setExecucaoData({ ...execucaoData, equipamento_tag: e.target.value });
+                          setEquipamentoSearch(e.target.value);
+                          fetchEquipamentos();
+                        }}
+                      />
+                    {equipamentosLoading && (
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                    )}
+                    <datalist id="equipamentos-options">
+                      {equipamentos.map((equip) => (
+                        <option key={equip.id} value={equip.tag}>{`${equip.tag} - ${equip.nome}`}</option>
+                      ))}
+                    </datalist>
+                  </div>
+                  <p className="text-xs text-gray-500">
+                    Campo obrigatório apenas para formulários de checklist.
+                  </p>
+                </div>
+              )}
                
                <div>
                  <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -985,6 +1084,17 @@ function ExecutarFormularioPage() {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {existeImpeditivaNaoConforme && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                  <div className="flex items-center space-x-2 text-red-700 font-medium">
+                    <AlertTriangle className="w-5 h-5" />
+                    <span>Alerta: pergunta impeditiva marcada como Nao Conforme</span>
+                  </div>
+                  <p className="text-sm text-red-700 mt-2">
+                    Este checklist indica que o equipamento esta impedido de utilizacao. Revise as acoes antes de concluir.
+                  </p>
+                </div>
+              )}
               <div>
                 <Input
                   placeholder="Buscar usuários..."
@@ -1091,14 +1201,24 @@ function ExecutarFormularioPage() {
             {formulario.perguntas[perguntaAtual] && (
               <Card>
                 <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
+                  <CardTitle className="flex items-center space-x-3">
                     <FileText className="w-5 h-5" />
-                    <span>
-                      {formulario.perguntas[perguntaAtual].pergunta}
-                      {formulario.perguntas[perguntaAtual].obrigatoria && (
-                        <span className="text-red-500 ml-1">*</span>
-                      )}
-                    </span>
+                    <div className="flex flex-col">
+                      <span className="flex items-center space-x-2">
+                        <span>
+                          {formulario.perguntas[perguntaAtual].pergunta}
+                          {formulario.perguntas[perguntaAtual].obrigatoria && (
+                            <span className="text-red-500 ml-1">*</span>
+                          )}
+                        </span>
+                        {formulario.check_list && formulario.perguntas[perguntaAtual].impeditivo && (
+                          <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">
+                            <AlertTriangle className="w-3 h-3 mr-1" />
+                            Pergunta impeditiva
+                          </span>
+                        )}
+                      </span>
+                    </div>
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -1232,14 +1352,25 @@ function ExecutarFormularioPage() {
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
                 <CheckCircle className="w-5 h-5" />
-                <span>Finalizar Execução</span>
+                <span>Finalizar Execu??uo</span>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
+              {existeImpeditivaNaoConforme && (
+                <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                  <div className="flex items-center space-x-2 text-red-700 font-medium">
+                    <AlertTriangle className="w-5 h-5" />
+                    <span>Alerta: pergunta impeditiva marcada como Nao Conforme</span>
+                  </div>
+                  <p className="text-sm text-red-700 mt-2">
+                    Este checklist indica que o equipamento esta impedido de utilizacao. Revise as acoes antes de concluir.
+                  </p>
+                </div>
+              )}
               <div className="bg-blue-50 p-4 rounded-lg">
                 <div className="flex items-center space-x-2 text-blue-800 mb-2">
                   <AlertCircle className="w-5 h-5" />
-                  <span className="font-medium">Resumo da Execução</span>
+                  <span className="font-medium">Resumo da Execu??uo</span>
                 </div>
                 <div className="space-y-2 text-sm">
                   <div><strong>Local:</strong> {locais.find(l => l.id === execucaoData.local_id)?.local}</div>
@@ -1250,8 +1381,8 @@ function ExecutarFormularioPage() {
 
               <div className="text-sm text-gray-600">
                 <p>
-                  Ao finalizar, a execução será marcada como concluída e uma nota de conformidade 
-                  será calculada automaticamente com base nas respostas fornecidas.
+                  Ao finalizar, a execu??uo sero marcada como conclu??da e uma nota de conformidade 
+                  sero calculada automaticamente com base nas respostas fornecidas.
                 </p>
               </div>
             </CardContent>

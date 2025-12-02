@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import MainLayout from '@/components/Layout/MainLayout';
@@ -31,6 +31,7 @@ interface Formulario {
   id: string;
   titulo: string;
   descricao: string;
+  check_list: boolean;
   categoria: {
     nome: string;
     cor: string;
@@ -46,6 +47,7 @@ interface Pergunta {
   permite_conforme: boolean;
   permite_nao_conforme: boolean;
   permite_nao_aplica: boolean;
+  impeditivo?: boolean;
 }
 
 interface Local {
@@ -78,6 +80,8 @@ interface ExecucaoExistente {
     matricula_participante: string;
     usuario: Usuario;
   }>;
+  data_inicio?: string;
+  equipamento_tag?: string;
   respostas: Array<{
     pergunta_id: string;
     resposta: 'conforme' | 'nao_conforme' | 'nao_aplica' | '';
@@ -92,6 +96,7 @@ interface ExecucaoData {
   local_id: string;
   data_inicio: string;
   participantes: string[];
+  equipamento_tag: string;
   respostas: Resposta[];
 }
 
@@ -109,19 +114,31 @@ function ContinuarExecucaoPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [etapaAtual, setEtapaAtual] = useState<Etapa>('local');
+  const [equipamentos, setEquipamentos] = useState<{ id: string; tag: string; nome: string }[]>([]);
+  const [equipamentoSearch, setEquipamentoSearch] = useState('');
+  const [equipamentosLoading, setEquipamentosLoading] = useState(false);
   
   const [execucaoData, setExecucaoData] = useState<ExecucaoData>({
     local_id: '',
     data_inicio: new Date().toISOString(),
+    equipamento_tag: '',
     participantes: [],
     respostas: []
   });
   const [perguntaAtual, setPerguntaAtual] = useState(0);
   const [searchUsuarios, setSearchUsuarios] = useState('');
   const [planoModalOpen, setPlanoModalOpen] = useState(false);
-  // Removido estado temNaoConformes — bloco de plano na finalização foi retirado
+  // Removido estado temNaoConformes – bloco de plano na finalização foi retirado
   const [perguntaIdCriandoPlano, setPerguntaIdCriandoPlano] = useState<string>('');
   const [planosExistentes, setPlanosExistentes] = useState<Array<{id: string, pergunta_id: string, desvio: string}>>([]);
+  const existeImpeditivaNaoConforme = useMemo(() => {
+    if (!execucaoExistente?.formulario?.check_list) return false;
+    return execucaoData.respostas.some((resposta) => {
+      if (resposta.valor !== 'nao_conforme') return false;
+      const pergunta = execucaoExistente.formulario.perguntas.find(p => p.id === resposta.pergunta_id);
+      return pergunta?.impeditivo;
+    });
+  }, [execucaoData.respostas, execucaoExistente]);
   
   const adicionarParticipante = (matricula: string) => {
     setExecucaoData(prev => ({
@@ -238,14 +255,29 @@ function ContinuarExecucaoPage() {
         throw new Error('Erro ao carregar execução');
       }
       
-      const data = await response.json();
-      const execucao = data?.data ?? data;
+      const data = await response.json() as { data: ExecucaoExistente };
+      const execucao: ExecucaoExistente = data.data;
       if (!execucao || !execucao.local) {
         toast.error('Dados da execução inválidos');
         router.push('/inspecoes/execucoes');
         return;
       }
-      setExecucaoExistente(execucao);
+      const perguntasNormalizadas: Pergunta[] = Array.isArray(execucao.formulario?.perguntas)
+        ? execucao.formulario.perguntas.map((p: Pergunta) => ({
+            ...p,
+            impeditivo: p.impeditivo ?? false,
+          }))
+        : [];
+
+      const formularioNormalizado = execucao.formulario
+        ? {
+            ...execucao.formulario,
+            check_list: execucao.formulario.check_list ?? false,
+            perguntas: perguntasNormalizadas,
+          }
+        : execucao.formulario;
+
+      setExecucaoExistente({ ...execucao, formulario: formularioNormalizado });
 
       // Buscar formulário completo para garantir flags permite_*
       try {
@@ -265,7 +297,11 @@ function ContinuarExecucaoPage() {
                 formulario: {
                   ...prev.formulario,
                   ...formularioCompleto,
-                  perguntas: formularioCompleto.perguntas
+                  check_list: formularioCompleto.check_list ?? false,
+                  perguntas: formularioCompleto.perguntas.map((p: Pergunta) => ({
+                    ...p,
+                    impeditivo: p.impeditivo ?? false,
+                  }))
                 }
               }) : prev);
             }
@@ -279,6 +315,7 @@ function ContinuarExecucaoPage() {
       setExecucaoData({
         local_id: execucao.local?.id ?? '',
         data_inicio: execucao.data_inicio || new Date().toISOString(),
+        equipamento_tag: execucao.equipamento_tag || '',
         participantes: (Array.isArray(execucao.participantes) ? execucao.participantes : []).map((p: { matricula_participante: string; usuario: Usuario }) => p.matricula_participante),
         respostas: (Array.isArray(execucao.respostas) ? execucao.respostas : []).map((r: { pergunta_id: string; resposta: 'conforme' | 'nao_conforme' | 'nao_aplica' | ''; observacoes?: string }) => ({
           pergunta_id: r.pergunta_id,
@@ -346,6 +383,31 @@ function ContinuarExecucaoPage() {
     }
   }, [searchUsuarios]);
 
+  const fetchEquipamentos = useCallback(async () => {
+    if (!execucaoExistente?.formulario?.check_list) return;
+    try {
+      setEquipamentosLoading(true);
+      const token = localStorage.getItem('auth_token');
+      if (!token) return;
+
+      const params = new URLSearchParams();
+      if (equipamentoSearch) params.append('search', equipamentoSearch);
+
+      const response = await fetch(`/api/inspecoes/equipamentos?${params.toString()}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setEquipamentos(data.data || []);
+      }
+    } catch (error) {
+      console.error('Erro ao carregar equipamentos:', error);
+    } finally {
+      setEquipamentosLoading(false);
+    }
+  }, [equipamentoSearch, execucaoExistente?.formulario?.check_list]);
+
   useEffect(() => {
     const loadData = async () => {
       setLoading(true);
@@ -359,6 +421,10 @@ function ContinuarExecucaoPage() {
 
     loadData();
   }, [fetchExecucaoExistente, fetchLocais, fetchUsuarios]);
+
+  useEffect(() => {
+    fetchEquipamentos();
+  }, [fetchEquipamentos]);
 
   // Verificar se o ID da execução está presente
   if (!execucaoId) {
@@ -384,6 +450,7 @@ function ContinuarExecucaoPage() {
         body: JSON.stringify({
           local_id: execucaoData.local_id,
           data_inicio: execucaoData.data_inicio,
+          equipamento_tag: execucaoData.equipamento_tag || null,
           participantes: execucaoData.participantes,
           respostas: execucaoData.respostas.map(r => ({
             pergunta_id: r.pergunta_id,
@@ -465,6 +532,7 @@ function ContinuarExecucaoPage() {
         body: JSON.stringify({
           local_id: execucaoData.local_id,
           data_inicio: execucaoData.data_inicio,
+          equipamento_tag: execucaoData.equipamento_tag || null,
           participantes: execucaoData.participantes,
           respostas: execucaoData.respostas.map(r => ({
             pergunta_id: r.pergunta_id,
@@ -511,7 +579,7 @@ function ContinuarExecucaoPage() {
   const podeProximaEtapa = () => {
     switch (etapaAtual) {
       case 'local':
-        return execucaoData.local_id !== '';
+        return execucaoData.local_id !== '' && (!execucaoExistente?.formulario?.check_list || !!execucaoData.equipamento_tag);
       case 'participantes':
         return execucaoData.participantes.length > 0;
       case 'perguntas': {
@@ -646,13 +714,44 @@ function ContinuarExecucaoPage() {
                       className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
                     >
                       <option value="">Selecione um local...</option>
-                      {locais.map((local) => (
-                        <option key={local.id} value={local.id}>
-                          {local.local}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+                    {locais.map((local) => (
+                      <option key={local.id} value={local.id}>
+                        {local.local}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                  
+                  {execucaoExistente?.formulario?.check_list && (
+                    <div className="space-y-2">
+                      <label className="block text-sm font-medium text-gray-700">
+                        Tag do equipamento <span className="text-red-500">*</span>
+                      </label>
+                      <div className="relative">
+                        <Input
+                          list="equipamentos-options-continuar"
+                          placeholder="Selecione ou digite para filtrar..."
+                          value={execucaoData.equipamento_tag}
+                          onChange={(e) => {
+                            setExecucaoData({ ...execucaoData, equipamento_tag: e.target.value });
+                            setEquipamentoSearch(e.target.value);
+                            fetchEquipamentos();
+                          }}
+                        />
+                        {equipamentosLoading && (
+                          <div className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+                        )}
+                        <datalist id="equipamentos-options-continuar">
+                          {equipamentos.map((equip) => (
+                            <option key={equip.id} value={equip.tag}>{`${equip.tag} - ${equip.nome}`}</option>
+                          ))}
+                        </datalist>
+                      </div>
+                      <p className="text-xs text-gray-500">
+                        Campo obrigatório apenas para formulários de checklist.
+                      </p>
+                    </div>
+                  )}
                   
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -787,14 +886,22 @@ function ContinuarExecucaoPage() {
                 {execucaoExistente.formulario.perguntas[perguntaAtual] && (
                   <Card>
                     <CardHeader>
-                      <CardTitle className="flex items-center space-x-2">
+                      <CardTitle className="flex items-center space-x-3">
                         <FileText className="w-5 h-5" />
-                        <span>
-                          {execucaoExistente.formulario.perguntas[perguntaAtual].pergunta}
-                          {execucaoExistente.formulario.perguntas[perguntaAtual].obrigatoria && (
-                            <span className="text-red-500 ml-1">*</span>
+                        <div className="flex items-center space-x-2">
+                          <span>
+                            {execucaoExistente.formulario.perguntas[perguntaAtual].pergunta}
+                            {execucaoExistente.formulario.perguntas[perguntaAtual].obrigatoria && (
+                              <span className="text-red-500 ml-1">*</span>
+                            )}
+                          </span>
+                          {execucaoExistente.formulario.check_list && execucaoExistente.formulario.perguntas[perguntaAtual].impeditivo && (
+                            <span className="inline-flex items-center px-2 py-0.5 text-xs font-semibold rounded-full bg-red-100 text-red-700">
+                              <AlertTriangle className="w-3 h-3 mr-1" />
+                              Pergunta impeditiva
+                            </span>
                           )}
-                        </span>
+                        </div>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -912,6 +1019,18 @@ function ContinuarExecucaoPage() {
                   <CheckCircle className="h-5 w-5 text-blue-600" />
                   <h3 className="text-lg font-semibold">Finalizar Execução</h3>
                 </div>
+                {existeImpeditivaNaoConforme && (
+                  <div className="rounded-lg border border-red-200 bg-red-50 p-4">
+                    <div className="flex items-center space-x-2 text-red-700 font-medium">
+                      <AlertTriangle className="h-5 w-5" />
+                      <span>Alerta: pergunta impeditiva marcada como Nao Conforme</span>
+                    </div>
+                    <p className="text-sm text-red-700 mt-2">
+                      Este checklist indica que o equipamento esta impedido de utilizacao. Revise as acoes antes de concluir.
+                    </p>
+                  </div>
+                )}
+
                 
                 {/* Removido: bloco de criação de plano na finalização (agora feito nas perguntas) */}
                 
@@ -1019,3 +1138,5 @@ function ContinuarExecucaoPage() {
 }
 
 export default ContinuarExecucaoPage;
+
+

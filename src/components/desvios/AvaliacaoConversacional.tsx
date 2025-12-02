@@ -141,7 +141,6 @@ export default function AvaliacaoConversacional({ isOpen, onClose, desvio, onSuc
   const [desvioCompleto, setDesvioCompleto] = useState<Desvio | null>(null)
   const [userInput, setUserInput] = useState('')
   const [showInput, setShowInput] = useState(false)
-  const [messageIdCounter, setMessageIdCounter] = useState(0)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   
   const [avaliacaoData, setAvaliacaoData] = useState<AvaliacaoData>({
@@ -337,11 +336,14 @@ export default function AvaliacaoConversacional({ isOpen, onClose, desvio, onSuc
     }
   }, [showInput])
 
+  const generateMessageId = useCallback((prefix: string) => {
+    return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 10)}`
+  }, [])
+
   const typeMessage = useCallback(async (text: string, type: 'bot' | 'user', callback?: () => void) => {
     setIsTyping(true)
     
-    const messageId = `msg-${messageIdCounter}-${Date.now()}`
-    setMessageIdCounter(prev => prev + 1)
+    const messageId = generateMessageId('msg')
     const newMessage: Message = {
       id: messageId,
       type,
@@ -378,7 +380,7 @@ export default function AvaliacaoConversacional({ isOpen, onClose, desvio, onSuc
     if (callback) {
       setTimeout(callback, 300)
     }
-  }, [messageIdCounter])
+  }, [generateMessageId])
 
   const showInputForQuestion = useCallback(() => {
     // setCurrentInputType(question.type)
@@ -389,6 +391,28 @@ export default function AvaliacaoConversacional({ isOpen, onClose, desvio, onSuc
       scrollToBottom()
     }, 100)
   }, [])
+
+  const showImagesInChat = useCallback((imagens: ImagemDesvio[]) => {
+    imagens.forEach((img, index) => {
+      setTimeout(() => {
+        const imageMessage = `🖼️ **Imagem ${index + 1}:** ${img.nome_arquivo}
+        
+*Clique para visualizar a imagem em tamanho real*`
+        
+        const messageId = generateMessageId('img')
+        
+        const newMessage: Message = {
+          id: messageId,
+          type: 'bot',
+          content: imageMessage,
+          timestamp: new Date(),
+          imageUrl: img.url_storage // Adicionar URL da imagem
+        }
+        
+        setMessages(prev => [...prev, newMessage])
+      }, index * 300) // Delay entre imagens
+    })
+  }, [generateMessageId])
 
   const startConversation = useCallback((desvioCarregado?: Desvio) => {
     // Verificar se desvio existe antes de prosseguir
@@ -433,7 +457,7 @@ ${desvioInfo.imagens.map((img: ImagemDesvio, index: number) => `📷 **Imagem ${
         })
       }, 1000)
     })
-  }, [desvio, desvioCompleto, questions, typeMessage, showInputForQuestion])
+  }, [desvio, desvioCompleto, questions, typeMessage, showInputForQuestion, showImagesInChat])
 
   const loadInitialData = useCallback(async () => {
     // Verificar se o desvio existe antes de tentar carregar os dados
@@ -483,32 +507,9 @@ ${desvioInfo.imagens.map((img: ImagemDesvio, index: number) => `📷 **Imagem ${
     }
   }, [isOpen, desvio?.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const showImagesInChat = (imagens: ImagemDesvio[]) => {
-    imagens.forEach((img, index) => {
-      setTimeout(() => {
-        const imageMessage = `🖼️ **Imagem ${index + 1}:** ${img.nome_arquivo}
-        
-*Clique para visualizar a imagem em tamanho real*`
-        
-        const messageId = `img-${index}-${Date.now()}`
-        setMessageIdCounter(prev => prev + 1)
-        
-        const newMessage: Message = {
-          id: messageId,
-          type: 'bot',
-          content: imageMessage,
-          timestamp: new Date(),
-          imageUrl: img.url_storage // Adicionar URL da imagem
-        }
-        
-        setMessages(prev => [...prev, newMessage])
-      }, index * 300) // Delay entre imagens
-    })
-  }
-
+  
   const addUserMessage = (content: string) => {
-    const messageId = `msg-${messageIdCounter}-${Date.now()}`
-    setMessageIdCounter(prev => prev + 1)
+    const messageId = generateMessageId('msg')
     const newMessage: Message = {
       id: messageId,
       type: 'user',
@@ -881,3 +882,4 @@ ${desvioInfo.imagens.map((img: ImagemDesvio, index: number) => `📷 **Imagem ${
     </div>
   )
 }
+

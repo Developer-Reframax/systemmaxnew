@@ -6,6 +6,8 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle,
+  Activity,
+  LayoutPanelLeft,
   TrendingUp,
   Users,
   Calendar,
@@ -426,6 +428,26 @@ export default function DesviosDashboard() {
               <AlertTriangle className="h-6 w-6 text-indigo-600 mr-3" />
               <span className="text-sm font-medium text-gray-900 dark:text-white">
                 Desvios Gerais
+              </span>
+            </a>
+
+            <a
+              href="/desvios/central-monitoramento"
+              className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Activity className="h-6 w-6 text-orange-600 mr-3" />
+              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                Central de Monitoramento
+              </span>
+            </a>
+
+            <a
+              href="/desvios/kanban"
+              className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <LayoutPanelLeft className="h-6 w-6 text-blue-600 mr-3" />
+              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                Kanban de Desvios
               </span>
             </a>
             

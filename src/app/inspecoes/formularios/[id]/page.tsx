@@ -33,6 +33,7 @@ interface Pergunta {
   permite_conforme: boolean;
   permite_nao_conforme: boolean;
   permite_nao_aplica: boolean;
+  impeditivo: boolean;
 }
 
 interface FormularioData {
@@ -41,6 +42,7 @@ interface FormularioData {
   descricao: string;
   categoria_id: string;
   corporativo: boolean;
+  check_list: boolean;
   ativo: boolean;
   perguntas: Pergunta[];
   tem_execucoes: boolean;
@@ -97,7 +99,16 @@ function EditarFormularioPage() {
       }
 
       const data = await response.json();
-      setFormData(data.data);
+      setFormData({
+        ...data.data,
+        check_list: data.data?.check_list ?? false,
+        perguntas: Array.isArray(data.data?.perguntas)
+          ? data.data.perguntas.map((p: Pergunta) => ({
+              ...p,
+              impeditivo: p.impeditivo ?? false,
+            }))
+          : [],
+      });
     } catch (error) {
       console.error('Erro ao carregar formulário:', error);
       toast.error('Erro ao carregar formulário');
@@ -126,7 +137,8 @@ function EditarFormularioPage() {
       ordem: formData.perguntas.length + 1,
       permite_conforme: true,
       permite_nao_conforme: true,
-      permite_nao_aplica: true
+      permite_nao_aplica: true,
+      impeditivo: false
     };
     setFormData({
       ...formData,
@@ -227,6 +239,7 @@ function EditarFormularioPage() {
           descricao: formData.descricao,
           categoria_id: formData.categoria_id,
           corporativo: formData.corporativo,
+          check_list: formData.check_list,
           ativo: formData.ativo,
           perguntas: formData.perguntas
         }),
@@ -431,6 +444,16 @@ function EditarFormularioPage() {
                 </div>
                 <div className="flex items-center space-x-2">
                   <Checkbox
+                    id="check_list"
+                    checked={formData.check_list}
+                    onCheckedChange={(checked) => setFormData({ ...formData, check_list: !!checked })}
+                  />
+                  <label htmlFor="check_list" className="text-sm font-medium text-gray-700">
+                    Checklist
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
                     id="ativo"
                     checked={formData.ativo}
                     onCheckedChange={(checked) => setFormData({ ...formData, ativo: !!checked })}
@@ -585,6 +608,23 @@ function EditarFormularioPage() {
                               </div>
                             </div>
                           </div>
+                          {formData.check_list && (
+                            <div className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`impeditivo_${pergunta.id}`}
+                                checked={pergunta.impeditivo}
+                                onCheckedChange={(checked) =>
+                                  updatePergunta(pergunta.id, "impeditivo", !!checked)
+                                }
+                              />
+                              <label 
+                                htmlFor={`impeditivo_${pergunta.id}`}
+                                className="text-sm text-gray-700"
+                              >
+                                Pergunta impeditiva
+                              </label>
+                            </div>
+                          )}
                         </div>
                         
                         <Button

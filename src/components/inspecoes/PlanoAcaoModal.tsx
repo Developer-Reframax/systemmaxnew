@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -76,6 +76,24 @@ export default function PlanoAcaoModal({
   });
   const [evidencias, setEvidencias] = useState<EvidenciaPlanoAcao[]>([]);
   const [novasEvidencias, setNovasEvidencias] = useState<File[]>([]);
+  const [buscaResponsavel, setBuscaResponsavel] = useState('');
+  const [responsavelOpen, setResponsavelOpen] = useState(false);
+
+  const usuariosFiltrados = useMemo(() => {
+    const termo = buscaResponsavel.trim().toLowerCase();
+    if (!termo) return usuarios;
+    return usuarios.filter((u) =>
+      u.nome.toLowerCase().includes(termo) ||
+      u.email.toLowerCase().includes(termo) ||
+      String(u.matricula).includes(termo)
+    );
+  }, [buscaResponsavel, usuarios]);
+
+  const exibirNomeCurto = (nome: string) => {
+    const partes = nome.trim().split(' ').filter(Boolean);
+    if (partes.length === 1) return partes[0];
+    return `${partes[0]} ${partes[partes.length - 1]}`;
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -358,6 +376,53 @@ export default function PlanoAcaoModal({
                     <Label>Responsável</Label>
                     <div className="p-3 bg-gray-100 rounded-md border">
                       <p className="text-gray-800">{plano.responsavel_info?.nome || 'Carregando...'} ({plano.responsavel_matricula})</p>
+                    </div>
+                  </div>
+                )}
+                {!plano && (
+                  <div className="space-y-2">
+                    <Label htmlFor="responsavel">Responsavel *</Label>
+                    <div className="relative">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between"
+                        id="responsavel"
+                        onClick={() => setResponsavelOpen((prev) => !prev)}
+                      >
+                        {formData.responsavel
+                          ? (() => {
+                              const selecionado = usuarios.find(u => u.matricula === formData.responsavel);
+                              return selecionado ? `${exibirNomeCurto(selecionado.nome)} (${selecionado.matricula})` : 'Selecione um responsavel';
+                            })()
+                          : 'Selecione um responsavel'}
+                      </Button>
+                      {responsavelOpen && (
+                        <div className="absolute z-10 mt-2 w-full rounded-md border bg-white p-3 shadow-lg">
+                          <Input
+                            placeholder="Buscar por nome, email ou matricula"
+                            value={buscaResponsavel}
+                            onChange={(e) => setBuscaResponsavel(e.target.value)}
+                          />
+                          <div className="mt-2 max-h-60 overflow-auto space-y-1">
+                            {usuariosFiltrados.length === 0 && (
+                              <p className="text-sm text-gray-500 px-1">Nenhum usuário encontrado</p>
+                            )}
+                            {usuariosFiltrados.map((usuario) => (
+                              <Button
+                                key={usuario.matricula}
+                                variant="ghost"
+                                className="w-full justify-start"
+                                onClick={() => {
+                                  handleInputChange('responsavel', usuario.matricula);
+                                  setResponsavelOpen(false);
+                                }}
+                              >
+                                {exibirNomeCurto(usuario.nome)} ({usuario.matricula})
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
