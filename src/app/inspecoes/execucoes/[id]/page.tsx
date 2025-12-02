@@ -52,6 +52,7 @@ interface ExecucaoDetalhes {
   };
   status: 'em_andamento' | 'concluida' | 'cancelada';
   nota_conformidade: number | null;
+  nota_final?: number | null;
   data_inicio: string;
   data_conclusao: string | null;
   participantes: Array<{
@@ -243,11 +244,16 @@ function DetalhesExecucaoPage() {
     }
   };
 
-  const getConformidadeColor = (nota: number) => {
-    if (nota >= 90) return 'text-green-600';
-    if (nota >= 60) return 'text-yellow-600';
-    return 'text-red-600';
-  };
+  const notaFinalValor = typeof execucao?.nota_final === 'number'
+    ? execucao.nota_final
+    : (typeof execucao?.nota_conformidade === 'number' ? execucao.nota_conformidade : null);
+  const notaFinalTexto = notaFinalValor != null ? `${notaFinalValor.toFixed(1)}%` : 'N/A';
+  const notaFinalCor = (() => {
+    if (notaFinalValor == null) return 'bg-gray-100 text-gray-700 border-gray-200';
+    if (notaFinalValor >= 90) return 'bg-green-100 text-green-800 border-green-200';
+    if (notaFinalValor >= 60) return 'bg-yellow-100 text-yellow-800 border-yellow-200';
+    return 'bg-red-100 text-red-800 border-red-200';
+  })();
 
   const canEdit = () => {
     return execucao?.status === 'em_andamento';
@@ -325,59 +331,88 @@ function DetalhesExecucaoPage() {
         </div>
 
         {/* Status e Informações Gerais */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <Card>
-            <CardHeader>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          <Card className="relative">
+            <CardHeader className="relative">
               <CardTitle className="flex items-center space-x-2">
                 {getStatusIcon(execucao.status)}
                 <span>Status</span>
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusColor(execucao.status)}`}>
+            <CardContent className="relative space-y-3">
+              <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold border ${getStatusColor(execucao.status)}`}>
                 {getStatusLabel(execucao.status)}
               </div>
-              {execucao.nota_conformidade != null && typeof execucao.nota_conformidade === 'number' && (
-                <div className="mt-4">
-                  <div className="text-sm text-gray-600 mb-1">Nota de Conformidade</div>
-                  <div className={`text-2xl font-bold ${getConformidadeColor(execucao.nota_conformidade)}`}>
-                    {execucao.nota_conformidade.toFixed(1)}%
+              <p className="text-xs text-gray-600">Situação atual da execução.</p>
+            </CardContent>
+          </Card>
+
+          <Card className="relative">
+            <CardHeader className="relative">
+              <CardTitle className="flex items-center space-x-2">
+                <Calendar className="w-5 h-5 text-emerald-700" />
+                <span>Datas</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="relative space-y-3">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                  <Clock className="w-5 h-5 text-emerald-700" />
+                </div>
+                <div>
+                  <div className="text-sm text-gray-600">Início</div>
+                  <div className="font-semibold text-gray-900">{formatDate(execucao.data_inicio)}</div>
+                </div>
+              </div>
+              {execucao.data_conclusao && (
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-full bg-emerald-100 flex items-center justify-center">
+                    <CheckCircle className="w-5 h-5 text-emerald-700" />
+                  </div>
+                  <div>
+                    <div className="text-sm text-gray-600">Conclusão</div>
+                    <div className="font-semibold text-gray-900">{formatDate(execucao.data_conclusao)}</div>
                   </div>
                 </div>
               )}
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
+          <Card className="relative">
+            <CardHeader className="relative">
               <CardTitle className="flex items-center space-x-2">
-                <Calendar className="w-5 h-5" />
-                <span>Datas</span>
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <div>
-                <div className="text-sm text-gray-600">Início</div>
-                <div className="font-medium">{formatDate(execucao.data_inicio)}</div>
-              </div>
-              {execucao.data_conclusao && (
-                <div>
-                  <div className="text-sm text-gray-600">Conclusão</div>
-                  <div className="font-medium">{formatDate(execucao.data_conclusao)}</div>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <MapPin className="w-5 h-5" />
+                <MapPin className="w-5 h-5 text-indigo-700" />
                 <span>Local</span>
               </CardTitle>
             </CardHeader>
-            <CardContent>
-              <div className="font-medium">{execucao.local.local}</div>
+            <CardContent className="relative">
+              <div className="flex items-center space-x-3">
+                <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center">
+                  <MapPin className="w-5 h-5 text-indigo-700" />
+                </div>
+                <div>
+                  <div className="font-semibold text-gray-900">{execucao.local.local}</div>
+                  <p className="text-xs text-gray-600">Local da execução</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="relative">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2 relative">
+                <CheckCircle className="w-5 h-5 text-green-600" />
+                <span>Nota da Inspeção</span>
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="relative flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">Resultado final</p>
+                <p className="text-xs text-gray-500">Média ponderada da execução</p>
+              </div>
+              <div className={`flex items-center justify-center w-20 h-20 rounded-full border-4 ${notaFinalCor}`}>
+                <span className="text-xl font-bold">{notaFinalTexto}</span>
+              </div>
             </CardContent>
           </Card>
         </div>

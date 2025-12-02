@@ -91,7 +91,7 @@ export default function LoginPage() {
     setPendingIdentifier('')
 
     if (!identifier.trim()) {
-      setError('Informe sua matricula ou email para redefinir a senha')
+      setError('Informe sua matricula para redefinir a senha')
       return
     }
 
@@ -209,7 +209,7 @@ export default function LoginPage() {
 
             <div>
               <label htmlFor="identifier" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Matrícula ou Email
+                Matrícula
               </label>
               <input
                 id="identifier"
@@ -220,7 +220,7 @@ export default function LoginPage() {
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white transition-colors"
-                placeholder="Digite sua matrícula ou email"
+                placeholder="Digite sua matrícula sem os zeros"
                 disabled={loading}
               />
             </div>

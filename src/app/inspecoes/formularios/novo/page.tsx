@@ -32,6 +32,7 @@ interface Pergunta {
   permite_conforme: boolean;
   permite_nao_conforme: boolean;
   permite_nao_aplica: boolean;
+  impeditivo: boolean;
 }
 
 interface FormularioData {
@@ -39,6 +40,7 @@ interface FormularioData {
   descricao: string;
   categoria_id: string;
   corporativo: boolean;
+  check_list: boolean;
   ativo: boolean;
   perguntas: Pergunta[];
 }
@@ -53,6 +55,7 @@ function NovoFormularioPage() {
     descricao: '',
     categoria_id: '',
     corporativo: false,
+    check_list: false,
     ativo: true,
     perguntas: []
   });
@@ -94,7 +97,8 @@ function NovoFormularioPage() {
       ordem: formData.perguntas.length + 1,
       permite_conforme: true,
       permite_nao_conforme: true,
-      permite_nao_aplica: true
+      permite_nao_aplica: true,
+      impeditivo: false
     };
     setFormData({
       ...formData,
@@ -299,6 +303,16 @@ function NovoFormularioPage() {
                 </div>
                 <div className="flex items-center space-x-2">
                   <Checkbox
+                    id="check_list"
+                    checked={formData.check_list}
+                    onCheckedChange={(checked) => setFormData({ ...formData, check_list: !!checked })}
+                  />
+                  <label htmlFor="check_list" className="text-sm font-medium text-gray-700">
+                    Checklist
+                  </label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
                     id="ativo"
                     checked={formData.ativo}
                     onCheckedChange={(checked) => setFormData({ ...formData, ativo: !!checked })}
@@ -453,6 +467,23 @@ function NovoFormularioPage() {
                               </div>
                             </div>
                           </div>
+                          {formData.check_list && (
+                            <div className="flex items-center space-x-2">
+                              <Checkbox
+                                id={`impeditivo_${pergunta.id}`}
+                                checked={pergunta.impeditivo}
+                                onCheckedChange={(checked) =>
+                                  updatePergunta(pergunta.id, "impeditivo", !!checked)
+                                }
+                              />
+                              <label 
+                                htmlFor={`impeditivo_${pergunta.id}`}
+                                className="text-sm text-gray-700"
+                              >
+                                Pergunta impeditiva
+                              </label>
+                            </div>
+                          )}
                         </div>
                         
                         <Button

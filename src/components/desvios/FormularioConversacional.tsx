@@ -735,8 +735,24 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       return
     }
 
-    // Adicionar resposta do usuário
-    addUserMessage(String(value))
+    // Adicionar resposta do usuário (mostrar label quando for select de natureza/tipo)
+    const valueAsString = String(value)
+    let displayValue = valueAsString
+    if (currentQuestion.field === 'natureza_id') {
+      const naturezaSelecionada = naturezas.find(n => String(n.id) === valueAsString)
+      if (naturezaSelecionada) displayValue = naturezaSelecionada.natureza
+    } else if (currentQuestion.field === 'tipo_id') {
+      const tipoSelecionado = tipos.find(t => String(t.id) === valueAsString)
+      if (tipoSelecionado) displayValue = tipoSelecionado.tipo
+    } else if (currentQuestion.field === 'riscoassociado_id') {
+      const riscoSelecionado = riscosAssociados.find(r => String(r.id) === valueAsString)
+      if (riscoSelecionado) displayValue = riscoSelecionado.risco_associado
+    } else if (currentQuestion.options && currentQuestion.options.length > 0) {
+      const optionSelecionada = currentQuestion.options.find(opt => opt.value === valueAsString)
+      if (optionSelecionada) displayValue = optionSelecionada.label
+    }
+
+    addUserMessage(displayValue)
     setUserInput('')
     setShowInput(false)
 
@@ -1092,9 +1108,59 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
           )
         }
 
+        const sortedOptions = currentQuestion.field === 'local'
+          ? [...options].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' }))
+          : options
+
+        if (currentQuestion.field === 'local') {
+          return (
+            <div className="space-y-2">
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleUserResponse(e.target.value)
+                  }
+                }}
+                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="" disabled>Selecione o local...</option>
+                {sortedOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )
+        }
+        
+        if (currentQuestion.field === 'riscoassociado_id') {
+          return (
+            <div className="space-y-2">
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleUserResponse(e.target.value)
+                  }
+                }}
+                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="" disabled>Selecione o risco associado...</option>
+                {sortedOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )
+        }
+
         return (
           <div className="space-y-2">
-            {options.map((option, index) => (
+            {sortedOptions.map((option, index) => (
               <button
                 key={`${option.value}-${index}`}
                 onClick={() => handleUserResponse(option.value)}

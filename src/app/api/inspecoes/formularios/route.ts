@@ -98,7 +98,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { categoria_id, titulo, corporativo = false, perguntas = [] } = body;
+    const { categoria_id, titulo, corporativo = false, check_list = false, perguntas = [] } = body;
 
     // Validar campos obrigatórios
     if (!categoria_id || !titulo) {
@@ -139,6 +139,7 @@ export async function POST(request: NextRequest) {
         categoria_id,
         titulo,
         corporativo,
+        check_list,
         ativo: true
       })
       .select()
@@ -156,6 +157,7 @@ export async function POST(request: NextRequest) {
         permite_conforme?: boolean
         permite_nao_conforme?: boolean
         permite_nao_aplica?: boolean
+        impeditivo?: boolean
       }
       const perguntasParaInserir = (perguntas as PerguntaInserir[]).map((pergunta, index: number) => ({
         formulario_id: novoFormulario.id,
@@ -163,7 +165,8 @@ export async function POST(request: NextRequest) {
         ordem: index + 1,
         permite_conforme: pergunta.permite_conforme !== false,
         permite_nao_conforme: pergunta.permite_nao_conforme !== false,
-        permite_nao_aplica: pergunta.permite_nao_aplica !== false
+        permite_nao_aplica: pergunta.permite_nao_aplica !== false,
+        impeditivo: pergunta.impeditivo === true
       }));
 
       const { error: perguntasError } = await supabase
