@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -16,7 +16,8 @@ import {
   Users,
   BarChart3,
   MessageCircle,
-  FileText
+  FileText,
+  Play
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -198,18 +199,27 @@ export default function EmociogramaDashboard() {
             <h1 className="text-2xl font-bold text-gray-900">Emociograma</h1>
             <p className="text-gray-600">Acompanhe seu bem-estar emocional</p>
           </div>
-          <button
-            onClick={handleNovoRegistro}
-            disabled={!canCreateToday}
-            className={`flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${
-              canCreateToday
-                ? 'bg-blue-600 text-white hover:bg-blue-700'
-                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
-            }`}
-          >
-            <Plus className="w-4 h-4 mr-2" />
-            {canCreateToday ? 'Novo Registro' : 'Já registrado hoje'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => router.push('/emociograma/dds')}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-500 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
+            >
+              <Play className="h-4 w-4" />
+              Iniciar DDS
+            </button>
+            <button
+              onClick={handleNovoRegistro}
+              disabled={!canCreateToday}
+              className={`flex items-center px-4 py-2 rounded-lg font-medium transition-colors ${
+                canCreateToday
+                  ? 'bg-blue-600 text-white hover:bg-blue-700'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              {canCreateToday ? 'Novo Registro' : 'Já registrado hoje'}
+            </button>
+          </div>
         </div>
 
         {/* Último registro */}
@@ -420,3 +430,4 @@ export default function EmociogramaDashboard() {
     </MainLayout>
   )
 }
+

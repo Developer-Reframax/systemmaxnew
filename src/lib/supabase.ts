@@ -30,6 +30,19 @@ export interface Usuario {
   updated_at: string
   letra_id?: string // ID da letra associada
   equipe_id?: string // ID da equipe associada
+  face_descriptors?: {
+    front?: number[]
+    right?: number[]
+    left?: number[]
+  }
+  face_snapshots?: {
+    front?: string
+    right?: string
+    left?: string
+  }
+  face_enrollment_status?: 'pendente' | 'ativo' | 'inativo'
+  face_last_enrolled_at?: string
+  face_model_version?: string
   contratos?: Contrato[] // Contratos que o usuário tem acesso
   letra?: Letra // Relacionamento com letra
   equipe?: Equipe // Relacionamento com equipe
@@ -122,3 +135,4 @@ export interface FuncionalidadeUsuario {
   created_at: string
   funcionalidade?: Funcionalidade
 }
+
