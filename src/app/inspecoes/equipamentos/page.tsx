@@ -14,7 +14,8 @@ import {
   Edit,
   Trash2,
   Camera,
-  ArrowLeft
+  ArrowLeft,
+  AlertTriangle
 } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -24,6 +25,7 @@ interface Equipamento {
   nome: string;
   descricao: string;
   imagem_url: string;
+  impedido?: boolean;
   created_at?: string;
 }
 
@@ -193,6 +195,12 @@ function EquipamentosPage() {
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <p className="text-sm text-gray-600 line-clamp-3">{equipamento.descricao}</p>
+                  {equipamento.impedido && (
+                    <div className="flex items-start space-x-2 rounded-md border border-red-200 bg-red-50 p-3 text-red-800 text-sm">
+                      <AlertTriangle className="w-4 h-4 mt-0.5 text-red-600" />
+                      <span>Equipamento impedido por não conformidade impeditiva em aberto.</span>
+                    </div>
+                  )}
                   <div className="flex justify-between items-center">
                     <div className="text-xs text-gray-500">
                       {equipamento.created_at
@@ -230,3 +238,6 @@ function EquipamentosPage() {
 }
 
 export default EquipamentosPage;
+
+
+

@@ -58,7 +58,8 @@ export async function GET(
       .select(`
         *,
         evidencias:evidencias_plano_acao(*),
-        pergunta:perguntas_formulario(pergunta)
+        pergunta:perguntas_formulario(pergunta, impeditivo),
+        execucao:execucoes_inspecao(id, tag_equipamento)
       `)
       .eq('execucao_inspecao_id', id)
       .order('created_at', { ascending: false });
@@ -126,9 +127,18 @@ export async function GET(
     }
 
     const planosComInfo: PlanoAcaoWithRelations[] = (planos || []).map((p) => {
-      const row = p as PlanoRow;
+      const row = p as PlanoRow & {
+        pergunta?: { pergunta?: string; impeditivo?: boolean };
+        execucao?: { id: string; tag_equipamento?: string | null };
+      };
       const info = usuariosMap.get(row.responsavel_matricula ?? row.responsavel ?? -1) || null;
-      return { ...(row as PlanoAcao), evidencias: row.evidencias, responsavel_info: info } as PlanoAcaoWithRelations;
+      return {
+        ...(row as PlanoAcao),
+        evidencias: row.evidencias,
+        responsavel_info: info,
+        pergunta: row.pergunta,
+        execucao: row.execucao
+      } as PlanoAcaoWithRelations;
     });
 
     return NextResponse.json({
@@ -287,3 +297,6 @@ export async function POST(
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
+
+
+

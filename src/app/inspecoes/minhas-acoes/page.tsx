@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { toast } from 'sonner'
-import { Edit, Search, CheckCircle, Calendar, FileText } from 'lucide-react'
+import { Edit, Search, CheckCircle, Calendar, FileText, AlertTriangle } from 'lucide-react'
 import PlanoAcaoModal from '@/components/inspecoes/PlanoAcaoModal'
 import { PlanoAcaoWithRelations } from '@/types/plano-acao'
 
@@ -29,12 +29,13 @@ interface PlanoAcaoItem {
   cadastrado_por_matricula: number
   created_at: string
   updated_at: string
-  pergunta?: { pergunta?: string }
+  pergunta?: { pergunta?: string; impeditivo?: boolean }
   evidencias?: Array<{ id: string; nome_arquivo?: string; url_storage?: string }>
   execucao?: {
     id: string
     status: string
     data_inicio: string
+    tag_equipamento?: string | null
     formulario?: { titulo?: string }
     local?: { local?: string }
   }
@@ -84,6 +85,37 @@ export default function MinhasAcoesPage() {
     fetchData()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const fetchEquipamentoInfo = async (tag?: string | null) => {
+    if (!tag) return null
+    try {
+      const token = localStorage.getItem('auth_token')
+      if (!token) return null
+      const res = await fetch(`/api/inspecoes/equipamentos?search=${encodeURIComponent(tag)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      })
+      if (!res.ok) return null
+      const data = await res.json()
+      const match = (data.data || []).find((eq: { tag?: string }) => eq.tag === tag)
+      return match || null
+    } catch (e) {
+      console.warn('Nao foi possivel buscar equipamento', e)
+      return null
+    }
+  }
+
+  type EquipamentoInfo = { id?: string; tag?: string; nome?: string }
+  const [equipamentosCache, setEquipamentosCache] = useState<Record<string, EquipamentoInfo>>({})
+
+  const getEquipamentoCached = async (tag?: string | null) => {
+    if (!tag) return null
+    if (equipamentosCache[tag]) return equipamentosCache[tag]
+    const info = await fetchEquipamentoInfo(tag)
+    if (info) {
+      setEquipamentosCache((prev) => ({ ...prev, [tag]: info }))
+    }
+    return info
+  }
 
   const filtered = useMemo(() => items, [items])
 
@@ -157,7 +189,12 @@ export default function MinhasAcoesPage() {
               <div className="text-center py-10">Carregando...</div>
             ) : (
               <div className="grid gap-4">
-                {filtered.map((plano) => (
+                {filtered.map((plano) => {
+                  const showImpedido =
+                    plano.status !== 'concluido' &&
+                    plano.pergunta?.impeditivo &&
+                    !!plano.execucao?.tag_equipamento
+                  return (
                   <Card key={plano.id} className="p-4">
                     <div className="flex items-center justify-between">
                       <div>
@@ -174,6 +211,13 @@ export default function MinhasAcoesPage() {
                         <Badge className={prioridadeBadge(plano.prioridade)}>{plano.prioridade}</Badge>
                       </div>
                     </div>
+
+                    {showImpedido && (
+                      <ImpedidoAlert
+                        tag={plano.execucao?.tag_equipamento || ''}
+                        getEquipamento={getEquipamentoCached}
+                      />
+                    )}
 
                     <div className="mt-4 grid grid-cols-2 gap-4 text-sm">
                       <div className="flex items-center space-x-2">
@@ -193,16 +237,18 @@ export default function MinhasAcoesPage() {
                     </div>
 
                     <div className="mt-3 flex items-center gap-2">
-                      <Button size="sm" onClick={() => { setPlanoSelecionado(plano); setModalOpen(true) }}>
-                        <Edit className="w-4 h-4 mr-2" />
-                        Editar
-                      </Button>
+                      {plano.status !== 'concluido' && (
+                        <Button size="sm" onClick={() => { setPlanoSelecionado(plano); setModalOpen(true) }}>
+                          <Edit className="w-4 h-4 mr-2" />
+                          Editar
+                        </Button>
+                      )}
                       <Button size="sm" variant="outline" onClick={() => window.open(`/inspecoes/execucoes/${plano.execucao_inspecao_id}`, '_blank')}>
                         Ver Execução
                       </Button>
                     </div>
                   </Card>
-                ))}
+                )})}
               </div>
             )}
           </div>
@@ -218,6 +264,31 @@ export default function MinhasAcoesPage() {
         />
       </div>
     </MainLayout>
+  )
+}
+
+type EquipamentoInfo = {
+  id?: string
+  tag?: string
+  nome?: string
+}
+
+function ImpedidoAlert({ tag, getEquipamento }: { tag: string; getEquipamento: (t?: string | null) => Promise<EquipamentoInfo | null> }) {
+  const [info, setInfo] = useState<EquipamentoInfo | null>(null)
+
+  useEffect(() => {
+    getEquipamento(tag).then(setInfo)
+  }, [tag, getEquipamento])
+
+  const nome = info?.nome || 'Equipamento'
+  return (
+    <div className="mt-3 flex items-start space-x-2 rounded-md border border-red-200 bg-red-50 p-3 text-red-800 text-sm">
+      <AlertTriangle className="w-4 h-4 mt-0.5 text-red-600" />
+      <div>
+        <div className="font-semibold">Equipamento impedido até resolver esta ação.</div>
+        <div>{nome} — Tag: {tag}</div>
+      </div>
+    </div>
   )
 }
 
