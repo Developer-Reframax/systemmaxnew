@@ -255,8 +255,9 @@ function ContinuarExecucaoPage() {
         throw new Error('Erro ao carregar execução');
       }
       
-      const data = await response.json() as { data: ExecucaoExistente };
-      const execucao: ExecucaoExistente = data.data;
+      const data = await response.json() as { data: ExecucaoExistente & { tag_equipamento?: string } };
+      const execucao: ExecucaoExistente & { tag_equipamento?: string } = data.data;
+      const equipamentoTag = execucao.equipamento_tag ?? execucao.tag_equipamento ?? '';
       if (!execucao || !execucao.local) {
         toast.error('Dados da execução inválidos');
         router.push('/inspecoes/execucoes');
@@ -277,7 +278,7 @@ function ContinuarExecucaoPage() {
           }
         : execucao.formulario;
 
-      setExecucaoExistente({ ...execucao, formulario: formularioNormalizado });
+      setExecucaoExistente({ ...execucao, formulario: formularioNormalizado, equipamento_tag: equipamentoTag });
 
       // Buscar formulário completo para garantir flags permite_*
       try {
@@ -315,7 +316,7 @@ function ContinuarExecucaoPage() {
       setExecucaoData({
         local_id: execucao.local?.id ?? '',
         data_inicio: execucao.data_inicio || new Date().toISOString(),
-        equipamento_tag: execucao.equipamento_tag || '',
+        equipamento_tag: equipamentoTag,
         participantes: (Array.isArray(execucao.participantes) ? execucao.participantes : []).map((p: { matricula_participante: string; usuario: Usuario }) => p.matricula_participante),
         respostas: (Array.isArray(execucao.respostas) ? execucao.respostas : []).map((r: { pergunta_id: string; resposta: 'conforme' | 'nao_conforme' | 'nao_aplica' | ''; observacoes?: string }) => ({
           pergunta_id: r.pergunta_id,
@@ -1138,5 +1139,6 @@ function ContinuarExecucaoPage() {
 }
 
 export default ContinuarExecucaoPage;
+
 
 

@@ -34,6 +34,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
+    const contrato = searchParams.get('contrato');
     const page = parseInt(searchParams.get('page') || '1', 10);
     const limit = parseInt(searchParams.get('limit') || '20', 10);
     const offset = (page - 1) * limit;
@@ -41,11 +42,16 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('equipamentos_inspecao')
       .select('*', { count: 'exact' })
+      .order('impedido', { ascending: false, nullsFirst: false })
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1);
 
     if (search) {
       query = query.or(`nome.ilike.%${search}%,tag.ilike.%${search}%`);
+    }
+
+    if (contrato && contrato !== 'todos') {
+      query = query.eq('contrato', contrato);
     }
 
     const { data, error, count } = await query;
@@ -89,7 +95,12 @@ export async function POST(request: NextRequest) {
     const imagem = formData.get('imagem') as File | null;
 
     if (!tag || !nome || !descricao || !imagem) {
-      return NextResponse.json({ error: 'Todos os campos são obrigatórios' }, { status: 400 });
+      return NextResponse.json({ error: 'Todos os campos sao obrigatorios' }, { status: 400 });
+    }
+
+    const contratoRaiz = authResult.user?.contrato_raiz;
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Contrato do usuario nao encontrado' }, { status: 400 });
     }
 
     const uploadPath = `${Date.now()}-${imagem.name}`;
@@ -115,7 +126,8 @@ export async function POST(request: NextRequest) {
         tag,
         nome,
         descricao,
-        imagem_url: publicUrl
+        imagem_url: publicUrl,
+        contrato: contratoRaiz
       })
       .select()
       .single();
@@ -132,3 +144,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
+
+
+
+
+
+
+
