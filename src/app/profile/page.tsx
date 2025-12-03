@@ -28,6 +28,7 @@ interface UserProfile {
   email: string
   telefone: string
   avatar_url?: string
+  termos_reconhecimento_facial?: boolean
 }
 
 type PoseKey = 'front' | 'right' | 'left'
@@ -96,6 +97,9 @@ export default function ProfilePage() {
   })
   const [faceStatusMessage, setFaceStatusMessage] = useState<string>('Pronto para ativar')
   const [videoReady, setVideoReady] = useState(false)
+  const [showConsentModal, setShowConsentModal] = useState(false)
+  const [consentChecked, setConsentChecked] = useState(false)
+  const [savingConsent, setSavingConsent] = useState(false)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const detectionOptionsRef = useRef<FaceDetectionOptions | null>(null)
@@ -129,7 +133,8 @@ export default function ProfilePage() {
       setProfile({
         nome: fetched.nome || '',
         email: fetched.email || '',
-        telefone: fetched.telefone || fetched.phone || ''
+        telefone: fetched.telefone || fetched.phone || '',
+        termos_reconhecimento_facial: fetched.termos_reconhecimento_facial || false
       })
 
       if (fetched.avatar_url) setAvatarPreview(fetched.avatar_url)
@@ -324,6 +329,56 @@ export default function ProfilePage() {
     }
   }
 
+  const updateConsent = async () => {
+    if (!user) return false
+    try {
+      setSavingConsent(true)
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      if (!token) {
+        toast.error('Token de autenticao no encontrado')
+        return false
+      }
+      const response = await fetch('/api/face/consent', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          consent: true
+        })
+      })
+      if (!response.ok) {
+        let message = 'No foi possivel registrar o consentimento'
+        try {
+          const body = await response.json()
+          if (body?.message) message = body.message
+        } catch {
+          // ignore parse issues
+        }
+        toast.error(message)
+        return false
+      }
+      setProfile((prev) => ({ ...prev, termos_reconhecimento_facial: true }))
+      return true
+    } catch (error) {
+      console.error('Erro ao salvar consentimento:', error)
+      toast.error('No foi possvel salvar seu consentimento')
+      return false
+    } finally {
+      setSavingConsent(false)
+    }
+  }
+
+  const handleConsentAndStart = async (): Promise<boolean> => {
+    if (profile.termos_reconhecimento_facial) {
+      await startFaceCapture()
+      return true
+    }
+    setShowConsentModal(true)
+    return false
+  }
+
   const submitFaceEnrollment = async () => {
     if (!faceDescriptors.front || !faceDescriptors.right || !faceDescriptors.left) {
       toast.error('Capture as 3 poses para ativar o reconhecimento.')
@@ -381,7 +436,12 @@ export default function ProfilePage() {
     try {
       setFaceLoading(true)
       if (!cameraReady) {
-        await startFaceCapture()
+        const started = await handleConsentAndStart()
+        if (!started) {
+          setFaceLoading(false)
+          return
+        }
+        // startFaceCapture already called above if consentido
         return
       }
 
@@ -773,7 +833,9 @@ export default function ProfilePage() {
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <button
-                    onClick={startFaceCapture}
+                    onClick={() => {
+                      void handleConsentAndStart()
+                    }}
                     disabled={faceLoading}
                     className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-blue-600 to-emerald-500 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-60"
                   >
@@ -876,9 +938,120 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
+      {showConsentModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[85vh] overflow-hidden border border-emerald-200/40 dark:border-emerald-700/40">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-emerald-500 to-blue-600 text-white">
+              <div>
+                <p className="text-xs uppercase tracking-[0.2em] font-semibold">LGPD / Biometria</p>
+                <h3 className="text-lg font-bold">Termo de consentimento para reconhecimento facial</h3>
+              </div>
+              <button
+                onClick={() => {
+                  setShowConsentModal(false)
+                  setConsentChecked(false)
+                }}
+                className="p-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-6 overflow-y-auto max-h-[60vh] text-gray-800 dark:text-gray-100">
+              <div className="rounded-xl border border-emerald-200/60 dark:border-emerald-700/60 bg-emerald-50/70 dark:bg-emerald-900/40 p-4 flex gap-3">
+                <Shield className="h-6 w-6 text-emerald-600 dark:text-emerald-300 flex-shrink-0" />
+                <div>
+                  <p className="font-semibold text-emerald-900 dark:text-emerald-100">Segurança e transparência</p>
+                  <p className="text-sm text-emerald-800/80 dark:text-emerald-100/80">
+                    Este termo está alinhado à Lei Geral de Proteção de Dados (LGPD) e descreve como seus dados biométricos serão usados.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-3 text-sm leading-relaxed">
+                <p className="font-semibold text-gray-900 dark:text-white">📄 TERMO DE CONSENTIMENTO PARA USO DE DADOS BIOMÉTRICOS (RECONHECIMENTO FACIAL)</p>
+                <p className="font-semibold">Systemmax – Reframax Engenharia</p>
+                <p>
+                  Ao habilitar o recurso de Reconhecimento Facial no Systemmax, o usuário declara estar ciente e de acordo com as condições abaixo, em conformidade com a Lei nº 13.709/2018 – Lei Geral de Proteção de Dados Pessoais (LGPD).
+                </p>
+                <ol className="list-decimal list-inside space-y-2">
+                  <li>
+                    <strong>Finalidade do Tratamento:</strong> uso exclusivo para identificação/autenticação no Systemmax. Nenhum outro uso será realizado.
+                  </li>
+                  <li>
+                    <strong>Dados Coletados:</strong> três capturas faciais convertidas em base64 para referência do algoritmo de reconhecimento.
+                  </li>
+                  <li>
+                    <strong>Natureza Sensível:</strong> dados biométricos são sensíveis (LGPD) e exigem consentimento específico.
+                  </li>
+                  <li>
+                    <strong>Armazenamento e Segurança:</strong> ambiente seguro, criptografia, acesso apenas por sistemas autorizados. Não há compartilhamento ou venda dos dados.
+                  </li>
+                  <li>
+                    <strong>Direito de Revogação:</strong> você pode revogar o consentimento e solicitar exclusão dos dados biométricos a qualquer momento.
+                  </li>
+                  <li>
+                    <strong>Consequências do Não Consentimento:</strong> o uso é opcional; você continua usando o Systemmax por métodos tradicionais.
+                  </li>
+                  <li>
+                    <strong>Transparência e Direitos:</strong> pode exercer todos os direitos da LGPD (acesso, correção, anonimização, bloqueio, portabilidade, informação de compartilhamento, revogação).
+                  </li>
+                  <li>
+                    <strong>Declaração de Consentimento:</strong> ao prosseguir, declara que leu, compreendeu e concorda com o tratamento dos dados biométricos sensíveis conforme descrito.
+                  </li>
+                </ol>
+              </div>
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <label className="flex items-center gap-3 text-sm font-medium text-gray-800 dark:text-gray-100">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500"
+                  checked={consentChecked}
+                  onChange={(e) => setConsentChecked(e.target.checked)}
+                />
+                Confirmo que li e ACEITO o termo acima.
+              </label>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    setShowConsentModal(false)
+                    setConsentChecked(false)
+                  }}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-100 hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  Não aceitar agora
+                </button>
+                <button
+                  onClick={async () => {
+                    if (!consentChecked) {
+                      toast.error('Marque a opção confirmando que leu e aceita os termos.')
+                      return
+                    }
+                    const ok = await updateConsent()
+                    if (ok) {
+                      setShowConsentModal(false)
+                      setConsentChecked(false)
+                      startFaceCapture()
+                    }
+                  }}
+                  disabled={savingConsent}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-emerald-600 to-blue-600 text-white font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-60"
+                >
+                  {savingConsent ? <Loader2 className="h-4 w-4 animate-spin" /> : <Shield className="h-4 w-4" />}
+                  Aceitar e ativar biometria
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </MainLayout>
   )
 }
+
 
 
 
