@@ -977,9 +977,9 @@ function ExecutarFormularioPage() {
         </div>
 
         {/* Progress */}
-        <Card>
+        <Card className="hidden">
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-4 sm:gap-6 justify-start">
               {etapas.map((etapa, index) => (
                 <div key={etapa} className="flex items-center">
                   <div className={`flex items-center space-x-2 px-3 py-2 rounded-lg ${
@@ -991,7 +991,7 @@ function ExecutarFormularioPage() {
                     <span className="font-medium">{getEtapaNome(etapa)}</span>
                   </div>
                   {index < etapas.length - 1 && (
-                    <div className={`w-8 h-0.5 mx-2 ${
+                    <div className={`hidden sm:block w-8 h-0.5 mx-2 ${
                       index < etapaIndex ? 'bg-blue-500' : 'bg-gray-300'
                     }`} />
                   )}

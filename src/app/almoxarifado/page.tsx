@@ -105,15 +105,15 @@ function AlmoxarifadoDashboard() {
     <MainLayout>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1 md:max-w-2xl">
             <h1 className="text-3xl font-bold text-gray-900">Almoxarifado</h1>
             <p className="text-gray-600">Gestão de estoque e requisições</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
             <Button 
               onClick={() => router.push('/almoxarifado/catalogo')}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto justify-center"
             >
               <ShoppingCart className="w-4 h-4 mr-2" />
               Nova Requisição
@@ -122,6 +122,7 @@ function AlmoxarifadoDashboard() {
               <Button 
                 onClick={() => router.push('/almoxarifado/itens')}
                 variant="outline"
+                className="hidden md:inline-flex"
               >
                 <Settings className="w-4 h-4 mr-2" />
                 Gerenciar Itens
