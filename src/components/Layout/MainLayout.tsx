@@ -26,7 +26,8 @@ import {
   ClipboardList,
   UserPlus,
   MessageSquare,
-  Package
+  Package,
+  BookOpen
 } from 'lucide-react'
 import { Lightbulb } from 'lucide-react'
 import Link from 'next/link'
@@ -61,6 +62,7 @@ const menuItems: MenuItem[] = [
   { name: 'OAC', href: '/oac', icon: ClipboardCheck, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: 'Parametrização de Segurança', href: '/security-params', icon: Shield, roles: ['Admin', 'Editor'] },
   { name: 'Sessões', href: '/sessions', icon: Activity, roles: ['Admin'] },
+  { name: 'Documentação', href: '/documentation', icon: BookOpen, roles: ['Admin', 'Editor', 'Viewer'] },
   { name: 'Configurações', href: '/settings', icon: Settings, roles: ['Admin'] },
 ]
 
@@ -71,7 +73,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
 
-  // Navegação centralizada para garantir transições client-side e fechamento da sidebar
+  // Navega??o centralizada para garantir transi??es client-side e fechamento da sidebar
   const navigate = (href: string) => {
     router.push(href)
     setSidebarOpen(false)
@@ -118,7 +120,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
 
         </div>
         
-        {/* Área de navegação com scroll */}
+        {/* Área de navega??o com scroll */}
         <nav className="flex-1 overflow-y-auto px-2 py-5">
           <div className="space-y-1">
             {filteredMenuItems.map((item) => {
@@ -217,7 +219,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
           <div className="flex-1 px-4 flex justify-between items-center">
             <div className="flex-1">
               <h1 className="text-2xl font-semibold text-gray-900 dark:text-white">
-                {menuItems.find(item => item.href === pathname)?.name || 'Sistema de Gestão'}
+                {menuItems.find(item => item.href === pathname)?.name || 'Sistema de Gest?o'}
               </h1>
             </div>
             
