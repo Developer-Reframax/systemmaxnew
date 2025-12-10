@@ -213,8 +213,8 @@ export default function OacDashboard() {
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-4">
               <Eye className="h-12 w-12 mr-4" />
               <div>
                 <h1 className="text-2xl font-bold">OAC - Observações Comportamentais</h1>
@@ -226,10 +226,10 @@ export default function OacDashboard() {
                 </p>
               </div>
             </div>
-            <div className="flex space-x-3">
+            <div className="flex w-full md:w-auto justify-start md:justify-end">
               <Link
                 href="/oac/nova"
-                className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors flex items-center"
+                className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors flex items-center w-full md:w-auto justify-center"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Nova OAC

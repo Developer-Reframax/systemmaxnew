@@ -10,6 +10,7 @@ import { toast } from 'sonner'
 interface ModuleFormData {
   nome: string
   descricao: string
+  slug: string
   tipo: 'corporativo' | 'exclusivo'
   ativo: boolean
 }
@@ -24,6 +25,7 @@ export default function ModulesPage() {
   const [formData, setFormData] = useState<ModuleFormData>({
     nome: '',
     descricao: '',
+    slug: '',
     tipo: 'corporativo',
     ativo: true
   })
@@ -125,6 +127,7 @@ export default function ModulesPage() {
     setFormData({
       nome: module.nome,
       descricao: module.descricao,
+      slug: module.slug || '',
       tipo: module.tipo,
       ativo: module.ativo
     })
@@ -194,6 +197,7 @@ export default function ModulesPage() {
     setFormData({
       nome: '',
       descricao: '',
+      slug: '',
       tipo: 'corporativo',
       ativo: true
     })
@@ -335,7 +339,7 @@ export default function ModulesPage() {
                 <form onSubmit={handleSubmit} className="space-y-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Nome do Módulo *
+                      Nome do m?dulo *
                     </label>
                     <input
                       type="text"
@@ -344,6 +348,23 @@ export default function ModulesPage() {
                       onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                       className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      Slug do m?dulo *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.slug ?? ''}
+                      onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                      placeholder="ex.: usuarios, desvios"
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Usado para o controle de acesso visual (coluna slug da tabela modulos).
+                    </p>
                   </div>
 
                   <div>

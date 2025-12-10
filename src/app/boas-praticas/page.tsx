@@ -45,22 +45,22 @@ export default function BoasPraticasPage() {
     <MainLayout>
       <div className="container mx-auto p-6 space-y-6">
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-1 sm:max-w-2xl">
             <h1 className="text-3xl font-bold text-gray-900">Boas Práticas - Lab Idéias</h1>
             <p className="text-gray-600">Gestao de idéias e boas praticas da organizacao</p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
             <Button
               onClick={() => router.push('/boas-praticas')}
-              className='bg-green-600 hover:bg-green-700'
+              className='bg-green-600 hover:bg-green-700 w-full sm:w-auto justify-center'
             >
               <Plus className="w-4 h-4 mr-2" />
               Nova idéia
             </Button>
             <Button
               onClick={() => router.push('/boas-praticas/novo')}
-              className="bg-blue-600 hover:bg-blue-700"
+              className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto justify-center"
             >
               <Plus className="w-4 h-4 mr-2" />
               Nova Boa Prática

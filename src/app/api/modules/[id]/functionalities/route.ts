@@ -7,24 +7,22 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - Buscar funcionalidades de um módulo
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 })
+      return NextResponse.json({ error: 'Token nao fornecido' }, { status: 401 })
     }
 
     const token = authHeader.substring(7)
     const decoded = verifyToken(token)
-    
+
     if (!decoded) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+      return NextResponse.json({ error: 'Token invalido' }, { status: 401 })
     }
 
     const { id: moduleId } = await params
 
-    // Verificar se o módulo existe
     const { data: module, error: moduleError } = await supabase
       .from('modulos')
       .select('id, nome')
@@ -32,10 +30,9 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .single()
 
     if (moduleError || !module) {
-      return NextResponse.json({ error: 'Módulo não encontrado' }, { status: 404 })
+      return NextResponse.json({ error: 'Modulo nao encontrado' }, { status: 404 })
     }
 
-    // Buscar funcionalidades do módulo
     const { data: functionalities, error } = await supabase
       .from('modulo_funcionalidades')
       .select('*')
@@ -54,30 +51,34 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// POST - Criar nova funcionalidade
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 })
+      return NextResponse.json({ error: 'Token nao fornecido' }, { status: 401 })
     }
 
     const token = authHeader.substring(7)
     const decoded = verifyToken(token)
-    
+
     if (!decoded || decoded.role !== 'Admin') {
       return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem criar funcionalidades.' }, { status: 403 })
     }
 
     const { id: moduleId } = await params
     const body = await request.json()
-    const { nome, descricao, ativa = true } = body
+    const { nome, descricao, ativa = true, slug, tipo } = body
 
     if (!nome) {
-      return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
+      return NextResponse.json({ error: 'Nome e obrigatorio' }, { status: 400 })
+    }
+    if (!slug) {
+      return NextResponse.json({ error: 'Slug e obrigatorio' }, { status: 400 })
+    }
+    if (tipo && !['corporativo', 'exclusivo'].includes(tipo)) {
+      return NextResponse.json({ error: 'Tipo invalido' }, { status: 400 })
     }
 
-    // Verificar se o módulo existe
     const { data: module, error: moduleError } = await supabase
       .from('modulos')
       .select('id')
@@ -85,10 +86,9 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .single()
 
     if (moduleError || !module) {
-      return NextResponse.json({ error: 'Módulo não encontrado' }, { status: 404 })
+      return NextResponse.json({ error: 'Modulo nao encontrado' }, { status: 404 })
     }
 
-    // Verificar se já existe funcionalidade com o mesmo nome no módulo
     const { data: existingFunctionality } = await supabase
       .from('modulo_funcionalidades')
       .select('id')
@@ -97,17 +97,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .single()
 
     if (existingFunctionality) {
-      return NextResponse.json({ error: 'Já existe uma funcionalidade com este nome neste módulo' }, { status: 400 })
+      return NextResponse.json({ error: 'Ja existe uma funcionalidade com este nome neste modulo' }, { status: 400 })
     }
 
-    // Criar funcionalidade
     const { data: functionality, error } = await supabase
       .from('modulo_funcionalidades')
       .insert({
         modulo_id: moduleId,
         nome,
         descricao,
-        ativa
+        ativa,
+        slug,
+        tipo: (tipo as 'corporativo' | 'exclusivo') ?? 'corporativo'
       })
       .select()
       .single()
@@ -124,34 +125,37 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   }
 }
 
-// PUT - Atualizar funcionalidade
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 })
+      return NextResponse.json({ error: 'Token nao fornecido' }, { status: 401 })
     }
 
     const token = authHeader.substring(7)
     const decoded = verifyToken(token)
-    
+
     if (!decoded || decoded.role !== 'Admin') {
       return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem atualizar funcionalidades.' }, { status: 403 })
     }
 
     const { id: moduleId } = await params
     const body = await request.json()
-    const { functionalityId, nome, descricao, ativa } = body
+    const { functionalityId, nome, descricao, ativa, slug, tipo } = body
 
     if (!functionalityId) {
-      return NextResponse.json({ error: 'ID da funcionalidade é obrigatório' }, { status: 400 })
+      return NextResponse.json({ error: 'ID da funcionalidade e obrigatorio' }, { status: 400 })
     }
-
     if (!nome) {
-      return NextResponse.json({ error: 'Nome é obrigatório' }, { status: 400 })
+      return NextResponse.json({ error: 'Nome e obrigatorio' }, { status: 400 })
+    }
+    if (!slug) {
+      return NextResponse.json({ error: 'Slug e obrigatorio' }, { status: 400 })
+    }
+    if (tipo && !['corporativo', 'exclusivo'].includes(tipo)) {
+      return NextResponse.json({ error: 'Tipo invalido' }, { status: 400 })
     }
 
-    // Verificar se a funcionalidade existe e pertence ao módulo
     const { data: existingFunctionality, error: checkError } = await supabase
       .from('modulo_funcionalidades')
       .select('id, modulo_id')
@@ -160,10 +164,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .single()
 
     if (checkError || !existingFunctionality) {
-      return NextResponse.json({ error: 'Funcionalidade não encontrada' }, { status: 404 })
+      return NextResponse.json({ error: 'Funcionalidade nao encontrada' }, { status: 404 })
     }
 
-    // Verificar se já existe outra funcionalidade com o mesmo nome no módulo
     const { data: duplicateFunctionality } = await supabase
       .from('modulo_funcionalidades')
       .select('id')
@@ -173,16 +176,17 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .single()
 
     if (duplicateFunctionality) {
-      return NextResponse.json({ error: 'Já existe uma funcionalidade com este nome neste módulo' }, { status: 400 })
+      return NextResponse.json({ error: 'Ja existe uma funcionalidade com este nome neste modulo' }, { status: 400 })
     }
 
-    // Atualizar funcionalidade
     const { data: functionality, error } = await supabase
       .from('modulo_funcionalidades')
       .update({
         nome,
         descricao,
-        ativa
+        ativa,
+        slug,
+        tipo: (tipo as 'corporativo' | 'exclusivo') ?? 'corporativo'
       })
       .eq('id', functionalityId)
       .select()
@@ -200,17 +204,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// DELETE - Excluir funcionalidade
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const authHeader = request.headers.get('authorization')
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 })
+      return NextResponse.json({ error: 'Token nao fornecido' }, { status: 401 })
     }
 
     const token = authHeader.substring(7)
     const decoded = verifyToken(token)
-    
+
     if (!decoded || decoded.role !== 'Admin') {
       return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem excluir funcionalidades.' }, { status: 403 })
     }
@@ -220,10 +223,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     const functionalityId = searchParams.get('functionalityId')
 
     if (!functionalityId) {
-      return NextResponse.json({ error: 'ID da funcionalidade é obrigatório' }, { status: 400 })
+      return NextResponse.json({ error: 'ID da funcionalidade e obrigatorio' }, { status: 400 })
     }
 
-    // Verificar se a funcionalidade existe e pertence ao módulo
     const { data: existingFunctionality, error: checkError } = await supabase
       .from('modulo_funcionalidades')
       .select('id, modulo_id')
@@ -232,10 +234,9 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .single()
 
     if (checkError || !existingFunctionality) {
-      return NextResponse.json({ error: 'Funcionalidade não encontrada' }, { status: 404 })
+      return NextResponse.json({ error: 'Funcionalidade nao encontrada' }, { status: 404 })
     }
 
-    // Verificar se existem usuários associados a esta funcionalidade
     const { data: associatedUsers, error: usersError } = await supabase
       .from('funcionalidade_usuarios')
       .select('id')
@@ -243,17 +244,16 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .limit(1)
 
     if (usersError) {
-      console.error('Erro ao verificar usuários associados:', usersError)
-      return NextResponse.json({ error: 'Erro ao verificar dependências' }, { status: 500 })
+      console.error('Erro ao verificar usuarios associados:', usersError)
+      return NextResponse.json({ error: 'Erro ao verificar dependencias' }, { status: 500 })
     }
 
     if (associatedUsers && associatedUsers.length > 0) {
-      return NextResponse.json({ 
-        error: 'Não é possível excluir esta funcionalidade pois existem usuários associados a ela' 
+      return NextResponse.json({
+        error: 'Nao e possivel excluir esta funcionalidade pois existem usuarios associados a ela'
       }, { status: 400 })
     }
 
-    // Excluir funcionalidade
     const { error } = await supabase
       .from('modulo_funcionalidades')
       .delete()
@@ -264,7 +264,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: 'Erro ao excluir funcionalidade' }, { status: 500 })
     }
 
-    return NextResponse.json({ message: 'Funcionalidade excluída com sucesso' })
+    return NextResponse.json({ message: 'Funcionalidade excluida com sucesso' })
   } catch (error) {
     console.error('Erro interno:', error)
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })

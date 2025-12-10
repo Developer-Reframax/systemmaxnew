@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
 
     const { data: modules, error } = await supabase
       .from('modulos')
-      .select('id, nome, descricao, tipo, ativo, created_at')
+      .select('id, nome, descricao, tipo, ativo, slug, created_at')
       .order('nome')
 
     if (error) {
@@ -60,6 +60,10 @@ export async function POST(request: NextRequest) {
     }
 
     const moduleData = await request.json()
+
+    if (!moduleData?.slug) {
+      return NextResponse.json({ error: 'Slug do modulo é obrigatorio' }, { status: 400 })
+    }
 
     const { data, error } = await supabase
       .from('modulos')

@@ -13,6 +13,12 @@ interface Funcionalidade {
   descricao?: string
   ativa: boolean
   modulo_id: string
+  slug?: string
+  tipo?: 'corporativo' | 'exclusivo'
+  modulos?: {
+    id?: string
+    nome?: string
+  }
   created_at?: string
   updated_at?: string
 }
@@ -20,6 +26,14 @@ interface Funcionalidade {
 interface Module {
   id: string
   nome: string
+}
+
+interface FunctionalityFormData {
+  nome: string
+  descricao: string
+  ativa: boolean
+  slug: string
+  tipo: 'corporativo' | 'exclusivo'
 }
 
 export default function FunctionalitiesPage() {
@@ -34,10 +48,12 @@ export default function FunctionalitiesPage() {
   const [searchTerm, setSearchTerm] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [editingFunctionality, setEditingFunctionality] = useState<Funcionalidade | null>(null)
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<FunctionalityFormData>({
     nome: '',
     descricao: '',
-    ativa: true
+    ativa: true,
+    slug: '',
+    tipo: 'corporativo'
   })
 
   // Check authentication - only redirect if explicitly not authenticated and not loading
@@ -133,7 +149,7 @@ export default function FunctionalitiesPage() {
       toast.success(editingFunctionality ? 'Funcionalidade atualizada!' : 'Funcionalidade criada!')
       setIsModalOpen(false)
       setEditingFunctionality(null)
-      setFormData({ nome: '', descricao: '', ativa: true })
+      setFormData({ nome: '', descricao: '', ativa: true, slug: '', tipo: 'corporativo' })
       fetchFunctionalities()
     } catch (error: unknown) {
       console.error('Erro ao salvar funcionalidade:', error)
@@ -192,7 +208,9 @@ export default function FunctionalitiesPage() {
           functionalityId: functionality.id,
           nome: functionality.nome,
           descricao: functionality.descricao,
-          ativa: !functionality.ativa
+          ativa: !functionality.ativa,
+          slug: functionality.slug,
+          tipo: functionality.tipo ?? 'corporativo'
         })
       })
 
@@ -215,11 +233,13 @@ export default function FunctionalitiesPage() {
       setFormData({
         nome: functionality.nome,
         descricao: functionality.descricao || '',
-        ativa: functionality.ativa
+        ativa: functionality.ativa,
+        slug: functionality.slug || '',
+        tipo: functionality.tipo ?? 'corporativo'
       })
     } else {
       setEditingFunctionality(null)
-      setFormData({ nome: '', descricao: '', ativa: true })
+      setFormData({ nome: '', descricao: '', ativa: true, slug: '', tipo: 'corporativo' })
     }
     setIsModalOpen(true)
   }
@@ -392,6 +412,40 @@ export default function FunctionalitiesPage() {
                 
                 <div>
                   <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Slug *
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.slug}
+                    onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                    placeholder="ex.: criar_usuario, exportar_usuario"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                    required
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Coluna slug da tabela modulo_funcionalidades (controle visual).
+                  </p>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    Tipo *
+                  </label>
+                  <select
+                    value={formData.tipo}
+                    onChange={(e) => setFormData({ ...formData, tipo: e.target.value as 'corporativo' | 'exclusivo' })}
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  >
+                    <option value="corporativo">Corporativo</option>
+                    <option value="exclusivo">Exclusivo</option>
+                  </select>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Define se a funcionalidade aparece para todos (corporativo) ou apenas para usuários configurados.
+                  </p>
+                </div>
+                
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                     Descrição
                   </label>
                   <textarea
@@ -421,7 +475,7 @@ export default function FunctionalitiesPage() {
                     onClick={() => {
                       setIsModalOpen(false)
                       setEditingFunctionality(null)
-                      setFormData({ nome: '', descricao: '', ativa: true })
+                      setFormData({ nome: '', descricao: '', ativa: true, slug: '', tipo: 'corporativo' })
                     }}
                     className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-md transition-colors"
                   >

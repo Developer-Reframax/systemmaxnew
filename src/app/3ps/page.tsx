@@ -121,11 +121,11 @@ export default function Dashboard3Ps() {
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Dashboard 3 P's</h1>
             <p className="text-gray-600">Pausar, Processar, Prosseguir - Gestão de Avaliação de Riscos</p>
           </div>
-          <div className="flex gap-3 mt-4 sm:mt-0">
+          <div className="flex flex-col sm:flex-row flex-wrap gap-2 sm:gap-3 mt-4 sm:mt-0 w-full sm:w-auto">
             <select
               value={periodo}
               onChange={(e) => setPeriodo(e.target.value)}
-              className="px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full sm:w-auto px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="7">Últimos 7 dias</option>
               <option value="30">Últimos 30 dias</option>
@@ -133,14 +133,14 @@ export default function Dashboard3Ps() {
             </select>
             <Link
               href="/3ps/novo"
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors w-full sm:w-auto justify-center text-center"
             >
               <Plus className="w-4 h-4 mr-2" />
               Novo 3P
             </Link>
             <Link
               href="/3ps/meus-registros"
-              className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors w-full sm:w-auto justify-center text-center"
             >
               <List className="w-4 h-4 mr-2" />
               Meus Registros

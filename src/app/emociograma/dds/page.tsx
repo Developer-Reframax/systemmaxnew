@@ -378,9 +378,9 @@ export default function EmociogramaDDSPage() {
         </button>
       </div>
 
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 p-6">
-        <div className="lg:col-span-2 bg-black/30 rounded-2xl border border-white/10 relative overflow-hidden">
-          <video ref={videoRef} className="w-full h-full object-cover" autoPlay playsInline muted />
+      <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-4 p-6 lg:h-[calc(100vh-112px)] lg:overflow-hidden">
+        <div className="lg:col-span-2 bg-black/30 rounded-2xl border border-white/10 relative overflow-hidden lg:h-full lg:max-h-full">
+          <video ref={videoRef} className="w-full h-full lg:h-full object-cover" autoPlay playsInline muted />
           <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />
           {!streamReady && (
             <div className="absolute inset-0 flex items-center justify-center bg-black/60">
@@ -393,7 +393,7 @@ export default function EmociogramaDDSPage() {
           </div>
         </div>
 
-        <div className="bg-white text-gray-900 rounded-2xl shadow-xl p-4 flex flex-col gap-4">
+        <div className="bg-white text-gray-900 rounded-2xl shadow-xl p-4 flex flex-col gap-4 lg:max-h-full lg:overflow-y-auto">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-emerald-600" />

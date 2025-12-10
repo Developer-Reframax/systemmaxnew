@@ -142,8 +142,8 @@ export default function DesviosDashboard() {
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-gradient-to-r from-orange-600 to-red-600 rounded-lg shadow-lg p-6 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex items-start gap-4">
               <AlertTriangle className="h-12 w-12 mr-4" />
               <div>
                 <h1 className="text-2xl font-bold">Relatos/Desvios de Segurança</h1>
@@ -155,10 +155,10 @@ export default function DesviosDashboard() {
                 </p>
               </div>
             </div>
-            <div className="flex space-x-3">
+            <div className="flex w-full md:w-auto justify-start md:justify-end">
               <button
                 onClick={() => setShowNewDesvioModal(true)}
-                className="bg-white text-orange-600 px-4 py-2 rounded-lg font-medium hover:bg-orange-50 transition-colors flex items-center"
+                className="bg-white text-orange-600 px-4 py-2 rounded-lg font-medium hover:bg-orange-50 transition-colors flex items-center w-full md:w-auto justify-center"
               >
                 <Plus className="h-4 w-4 mr-2" />
                 Novo Desvio

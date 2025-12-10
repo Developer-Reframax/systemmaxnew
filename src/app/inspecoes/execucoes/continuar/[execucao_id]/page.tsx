@@ -655,7 +655,7 @@ function ContinuarExecucaoPage() {
         </div>
 
         {/* Progress Steps */}
-        <div className="flex items-center justify-center space-x-4 py-4">
+        <div className="hidden flex-col sm:flex-row sm:flex-wrap items-start sm:items-center justify-start sm:justify-center gap-4 sm:gap-6 py-4">
           {[
             { key: 'local', label: 'Local', icon: MapPin },
             { key: 'participantes', label: 'Participantes', icon: Users },
@@ -683,7 +683,7 @@ function ContinuarExecucaoPage() {
                   {etapa.label}
                 </span>
                 {index < 3 && (
-                  <div className={`w-8 h-0.5 mx-4 ${
+                  <div className={`hidden sm:block w-8 h-0.5 mx-4 ${
                     isCompleted ? 'bg-green-600' : 'bg-gray-300'
                   }`} />
                 )}
