@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react'
 import { toast } from 'sonner'
-import { Plus, Search, Edit, Trash2, MapPin } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, MapPin, Layers } from 'lucide-react'
 import MainLayout from '@/components/Layout/MainLayout'
 import { useAuth } from '@/hooks/useAuth'
 import { Contrato, Usuario } from '@/lib/supabase'
+import type { Modulo } from '@/lib/supabase'
 
 interface ContractFormData {
   codigo: string
@@ -21,9 +22,13 @@ export default function ContractsPage() {
   const { user } = useAuth()
   const [contracts, setContracts] = useState<Contrato[]>([])
   const [users, setUsers] = useState<Usuario[]>([])
+  const [modules, setModules] = useState<Modulo[]>([])
+  const [contractModules, setContractModules] = useState<{ modulo_id: string }[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [showModulesModal, setShowModulesModal] = useState(false)
   const [editingContract, setEditingContract] = useState<Contrato | null>(null)
+  const [selectedContract, setSelectedContract] = useState<Contrato | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [formData, setFormData] = useState<ContractFormData>({
     codigo: '',
@@ -38,6 +43,7 @@ export default function ContractsPage() {
   useEffect(() => {
     fetchContracts()
     fetchUsers()
+    fetchModules()
   }, [])
 
   const fetchContracts = async () => {
@@ -97,6 +103,93 @@ export default function ContractsPage() {
       }
     } catch (error) {
       console.error('Erro ao buscar usuários:', error)
+    }
+  }
+
+  const fetchModules = async () => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      if (!token) return
+
+      const response = await fetch('/api/modules', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const data = await response.json()
+      if (response.ok) {
+        setModules((data || []).filter((m: Modulo) => m.ativo))
+      }
+    } catch (error) {
+      console.error('Erro ao carregar módulos:', error)
+    }
+  }
+
+  const fetchContractModules = async (codigo: string) => {
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      if (!token) return
+
+      const response = await fetch(`/api/module-contracts?codigo_contrato=${codigo}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      })
+
+      const data = await response.json()
+      if (response.ok) {
+        setContractModules(data.moduleContracts || [])
+      } else {
+        setContractModules([])
+      }
+    } catch (error) {
+      console.error('Erro ao carregar módulos do contrato:', error)
+      setContractModules([])
+    }
+  }
+
+  const handleManageModules = async (contract: Contrato) => {
+    setSelectedContract(contract)
+    setShowModulesModal(true)
+    await fetchContractModules(contract.codigo)
+  }
+
+  const isContractHasModule = (moduloId: string) =>
+    contractModules.some((mc) => mc.modulo_id === moduloId)
+
+  const handleToggleModuleForContract = async (moduloId: string) => {
+    if (!selectedContract) return
+    const codigo_contrato = selectedContract.codigo
+    try {
+      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      if (!token) {
+        toast.error('Token de autenticação não encontrado')
+        return
+      }
+
+      const hasAccess = isContractHasModule(moduloId)
+      const response = await fetch('/api/module-contracts', {
+        method: hasAccess ? 'DELETE' : 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ modulo_id: moduloId, codigo_contrato })
+      })
+
+      const data = await response.json()
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao atualizar módulos do contrato')
+      }
+
+      toast.success(hasAccess ? 'Módulo removido do contrato' : 'Módulo habilitado para o contrato')
+      await fetchContractModules(codigo_contrato)
+    } catch (error) {
+      console.error('Erro ao atualizar módulo do contrato:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao atualizar módulo do contrato')
     }
   }
 
@@ -204,7 +297,7 @@ export default function ContractsPage() {
         const errorData = await response.json()
         throw new Error(errorData.error || 'Erro ao excluir contrato')
       }
-      
+
       toast.success('Contrato excluído com sucesso!')
       fetchContracts()
     } catch (error) {
@@ -296,10 +389,9 @@ export default function ContractsPage() {
                       #{contract.codigo}
                     </p>
                   </div>
-                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                    contract.status === 'ativo' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
+                  <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${contract.status === 'ativo' ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200' :
                     'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
-                  }`}>
+                    }`}>
                     {contract.status === 'ativo' ? 'Ativo' : 'Inativo'}
                   </span>
                 </div>
@@ -329,6 +421,14 @@ export default function ContractsPage() {
                 </div>
 
                 <div className="flex justify-end space-x-2">
+                  {/* Gerenciar módulos do contrato */}
+                  <button
+                    onClick={() => handleManageModules(contract)}
+                    className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300 p-1"
+                    title="Gerenciar módulos do contrato"
+                  >
+                    <Layers className="h-4 w-4" />
+                  </button>
                   <button
                     onClick={() => handleEdit(contract)}
                     className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300 p-1"
@@ -486,6 +586,103 @@ export default function ContractsPage() {
             </div>
           </div>
         )}
+        {/* Modal de Gerenciar Módulos do Contrato */}
+        {showModulesModal && selectedContract && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white dark:bg-gray-800 rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                {/* Cabeçalho */}
+                <div className="flex justify-between items-center mb-4">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                    Gerenciar módulos – {selectedContract.nome} ({selectedContract.codigo})
+                  </h2>
+                  <button
+                    onClick={() => {
+                      setShowModulesModal(false)
+                      setSelectedContract(null)
+                      setContractModules([])
+                    }}
+                    className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                  >
+                    ✕
+                  </button>
+                </div>
+
+                {/* Texto explicativo */}
+                <p className="text-sm text-gray-600 dark:text-gray-300 mb-4">
+                  Selecione abaixo quais módulos este contrato deve ter acesso. Ao marcar ou desmarcar,
+                  o vínculo é salvo automaticamente na tabela <code>modulo_contratos</code>.
+                </p>
+
+                {/* Lista de módulos */}
+                {modules.length === 0 ? (
+                  <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+                    Nenhum módulo encontrado ou carregado.
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-80 overflow-y-auto">
+                    {modules.map((modulo) => {
+                      const hasAccess = isContractHasModule(modulo.id)
+
+                      return (
+                        <div
+                          key={modulo.id}
+                          className="grid grid-cols-[1fr_auto] gap-4 p-3 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                        >
+                          <div className="min-w-0 space-y-1">
+                            <div className="font-medium text-gray-900 dark:text-white break-words">
+                              {modulo.nome}
+                            </div>
+                            {modulo.descricao && (
+                              <div className="text-sm text-gray-500 dark:text-gray-400 break-words">
+                                {modulo.descricao}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex flex-col items-end justify-center space-y-2">
+                            {/* Switch de acesso */}
+                            <label className="relative inline-flex items-center cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={hasAccess}
+                                onChange={() => handleToggleModuleForContract(modulo.id)}
+                                className="sr-only peer"
+                              />
+                              <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 dark:peer-focus:ring-purple-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600"></div>
+                            </label>
+                            <span className="text-xs text-gray-600 dark:text-gray-300 text-center whitespace-nowrap">
+                              {hasAccess ? 'Habilitado' : 'Desabilitado'}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+
+                {/* Rodapé / resumo */}
+                <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-600 flex justify-between items-center">
+                  <span className="text-sm text-gray-600 dark:text-gray-300">
+                    Este contrato possui acesso a{' '}
+                    <strong>{contractModules.length}</strong> módulo(s) de{' '}
+                    <strong>{modules.length}</strong> disponíveis.
+                  </span>
+                  <button
+                    onClick={() => {
+                      setShowModulesModal(false)
+                      setSelectedContract(null)
+                      setContractModules([])
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 hover:bg-gray-200 dark:hover:bg-gray-500 rounded-lg transition-colors"
+                  >
+                    Fechar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </div>
     </MainLayout>
   )

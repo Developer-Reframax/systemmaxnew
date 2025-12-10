@@ -77,6 +77,7 @@ export interface Modulo {
   descricao: string
   tipo: 'corporativo' | 'exclusivo'
   ativo: boolean
+  slug: string
   created_at: string
 }
 
@@ -112,6 +113,8 @@ export interface Funcionalidade {
   nome: string
   descricao?: string
   ativa: boolean
+  slug: string
+  tipo?: 'corporativo' | 'exclusivo'
   created_at: string
   modulo?: Modulo
 }

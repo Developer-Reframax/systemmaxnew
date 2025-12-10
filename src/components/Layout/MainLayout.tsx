@@ -33,6 +33,7 @@ import {
 import { Lightbulb } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
+import { PermissionsProvider, usePermissions } from '@/contexts/PermissionsContext'
 
 interface MainLayoutProps {
   children: React.ReactNode
@@ -43,35 +44,52 @@ interface MenuItem {
   href: string
   icon: React.ComponentType<{ className?: string }>
   roles?: string[]
+  // TODO: Preencha moduleSlug com o slug do modulo (tabela "modulos") para ativar o filtro visual.
+  moduleSlug?: string
 }
 
 const menuItems: MenuItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: Home },
-  { name: 'Usuários', href: '/users', icon: Users, roles: ['Admin', 'Editor'] },
-  { name: 'Contratos', href: '/contracts', icon: Building2, roles: ['Admin', 'Editor'] },
+  {
+    name: 'Usuarios',
+    href: '/users',
+    icon: Users,
+    roles: ['Admin', 'Editor'],
+    moduleSlug: 'usuario',
+  },
+  { name: 'Contratos', href: '/contracts', icon: Building2, roles: ['Admin', 'Editor'], moduleSlug: 'contratos', },
   { name: 'Módulos', href: '/modules', icon: Layers3, roles: ['Admin'] },
-  { name: 'Letras', href: '/letters', icon: Mail, roles: ['Admin', 'Editor'] },
-  { name: 'Equipes', href: '/teams', icon: UserCheck, roles: ['Admin', 'Editor'] },
-  { name: 'Almoxarifado', href: '/almoxarifado', icon: Package, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Inspeções e Checks', href: '/inspecoes', icon: ClipboardList, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Boas Práticas / Lab idéias', href: '/boas-praticas', icon: Lightbulb, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Apadrinhamento', href: '/apadrinhamento', icon: UserPlus, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Interações', href: '/interacoes', icon: MessageSquare, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: '3 P\'s', href: '/3ps', icon: ClipboardCheck, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Relatos/Desvios', href: '/desvios', icon: AlertTriangle, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Gestão de emociograma', href: '/emociograma', icon: Heart, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Prontidão Cognitiva', href: '/prontidao', icon: Brain, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'OAC', href: '/oac', icon: ClipboardCheck, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Parametrização de Segurança', href: '/security-params', icon: Shield, roles: ['Admin', 'Editor'] },
-  { name: 'Sessões', href: '/sessions', icon: Activity, roles: ['Admin'] },
-  { name: 'Documentação', href: '/documentation', icon: BookOpen, roles: ['Admin', 'Editor', 'Viewer'] },
-  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['Admin'] },
+  { name: 'Letras', href: '/letters', icon: Mail, roles: ['Admin', 'Editor'], moduleSlug: 'letras', },
+  { name: 'Equipes', href: '/teams', icon: UserCheck, roles: ['Admin', 'Editor'], moduleSlug: 'equipes', },
+  { name: 'Almoxarifado', href: '/almoxarifado', icon: Package, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'almoxarifado', },
+  { name: 'Inspeções e Checks', href: '/inspecoes', icon: ClipboardList, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'inspecoes_checks', },
+  { name: 'Boas Práticas / Lab idéias', href: '/boas-praticas', icon: Lightbulb, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'boas_praticas', },
+  { name: 'Apadrinhamento', href: '/apadrinhamento', icon: UserPlus, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'apadrinhamento', },
+  { name: 'Interações', href: '/interacoes', icon: MessageSquare, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'interacoes', },
+  { name: '3 P\'s', href: '/3ps', icon: ClipboardCheck, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: '3p', },
+  { name: 'Relatos/Desvios', href: '/desvios', icon: AlertTriangle, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'relatos_desvios', },
+  { name: 'Gestão de emociograma', href: '/emociograma', icon: Heart, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'emociograma', },
+  { name: 'Prontidão Cognitiva', href: '/prontidao', icon: Brain, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'teste_prontidao', },
+  { name: 'OAC', href: '/oac', icon: ClipboardCheck, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'oac', },
+  { name: 'Parametrização de Segurança', href: '/security-params', icon: Shield, roles: ['Admin', 'Editor'], moduleSlug: 'parametrizacao_seguranca', },
+  { name: 'Sessões', href: '/sessions', icon: Activity, roles: ['Admin'], moduleSlug: 'monitoramento_seguranca', },
+  { name: 'Documentação', href: '/documentation', icon: BookOpen, roles: ['Admin', 'Editor', 'Viewer'], moduleSlug: 'documentacao', },
+  { name: 'Configurações', href: '/settings', icon: Settings, roles: ['Admin'], moduleSlug: 'documentacao', },
 ]
 
 export default function MainLayout({ children }: MainLayoutProps) {
+  return (
+    <PermissionsProvider>
+      <MainLayoutContent>{children}</MainLayoutContent>
+    </PermissionsProvider>
+  )
+}
+
+function MainLayoutContent({ children }: MainLayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const { user, logout, hasRole, loading } = useAuth()
   const { theme, toggleTheme } = useTheme()
+  const { canAccessModule } = usePermissions()
   const router = useRouter()
   const pathname = usePathname()
 
@@ -86,9 +104,15 @@ export default function MainLayout({ children }: MainLayoutProps) {
     router.push('/login')
   }
 
-  const filteredMenuItems = menuItems.filter(item =>
-    !item.roles || item.roles.some(role => hasRole(role))
-  )
+  const filteredMenuItems = menuItems
+    .filter(item =>
+      !item.roles || item.roles.some(role => hasRole(role))
+    )
+    .filter(item => {
+      // TODO: Defina item.moduleSlug para aplicar o controle visual de menus via useCanAccessModule.
+      if (!item.moduleSlug) return true
+      return canAccessModule(item.moduleSlug)
+    })
 
   // Show loading state while checking authentication
   if (loading) {
@@ -124,6 +148,7 @@ export default function MainLayout({ children }: MainLayoutProps) {
         {/* Área de navega??o com scroll */}
         <nav className="flex-1 overflow-y-auto px-2 py-5">
           <div className="space-y-1">
+            {/* TODO: Preencha moduleSlug e use useCanAccessModule(moduleSlug) para controlar a visibilidade de cada menu. */}
             {filteredMenuItems.map((item) => {
               const isActive = pathname === item.href
               return (
@@ -245,6 +270,8 @@ export default function MainLayout({ children }: MainLayoutProps) {
     </div>
   )
 }
+
+
 
 
 

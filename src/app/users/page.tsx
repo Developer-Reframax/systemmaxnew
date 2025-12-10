@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import MainLayout from '@/components/Layout/MainLayout'
 import { Usuario } from '@/lib/supabase'
@@ -8,6 +8,7 @@ import { Plus, Search, Edit, Trash2, Eye, EyeOff, Settings, Shield, Download } f
 import { toast } from 'sonner'
 import { Contrato, UsuarioContrato, Funcionalidade, FuncionalidadeUsuario } from '@/lib/supabase'
 import * as ExcelJS from 'exceljs'
+import { useCanAccessFuncionalidade, useModuloComFuncionalidades } from '@/contexts/PermissionsContext'
 
 interface UserFormData {
   nome: string
@@ -45,6 +46,27 @@ interface TeamOption {
 
 export default function UsersPage() {
   const { user } = useAuth()
+  // TODO: Preencha estes slugs com os valores configurados nas tabelas:
+  // - USERS_MODULE_SLUG: coluna "slug" da tabela "modulos" referente ao mÇúdulo de usuÇ­rios.
+  // - *_FUNC_SLUG: coluna "slug" da tabela "modulo_funcionalidades" para cada aÇõÇœo rÇ¸pida.
+  const USERS_MODULE_SLUG = 'usuario'
+  const CREATE_USER_FUNC_SLUG = 'criar_usuarios'
+  const EXPORT_USERS_FUNC_SLUG = 'exportar_excel_usuarios'
+  const EDIT_USER_FUNC_SLUG = 'editar_usuarios'
+  const MANAGE_CONTRACTS_FUNC_SLUG = 'editar_contratos_usuarios'
+  const MANAGE_FUNCTIONALITIES_FUNC_SLUG = 'editar_funcionalidades_usuarios'
+  const DELETE_USER_FUNC_SLUG = 'deletar_usuarios'
+
+  // Hooks de permissÇõÇœes visuais (retornam true enquanto os slugs estiverem vazios).
+  const usersModulePermissions = useModuloComFuncionalidades(USERS_MODULE_SLUG)
+  const canCreateUser = useCanAccessFuncionalidade(USERS_MODULE_SLUG, CREATE_USER_FUNC_SLUG)
+  const canExportUsers = useCanAccessFuncionalidade(USERS_MODULE_SLUG, EXPORT_USERS_FUNC_SLUG)
+  const canEditUsers = useCanAccessFuncionalidade(USERS_MODULE_SLUG, EDIT_USER_FUNC_SLUG)
+  const canManageContracts = useCanAccessFuncionalidade(USERS_MODULE_SLUG, MANAGE_CONTRACTS_FUNC_SLUG)
+  const canManageFunctionalities = useCanAccessFuncionalidade(USERS_MODULE_SLUG, MANAGE_FUNCTIONALITIES_FUNC_SLUG)
+  const canDeleteUsersByPermissions = useCanAccessFuncionalidade(USERS_MODULE_SLUG, DELETE_USER_FUNC_SLUG)
+  const permissionsLoaded = !!usersModulePermissions
+  const availableUsersFunctionalities = usersModulePermissions?.funcionalidades ?? []
   const [users, setUsers] = useState<Usuario[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -804,13 +826,31 @@ export default function UsersPage() {
   }
 
   // Verificar se o usuário logado pode deletar usuários
-  const canDeleteUsers = currentUserHasFunctionality('f98bff3d-38e2-4af1-b9c3-8ed1487ad39a')
+  const canDeleteUsers = currentUserHasFunctionality('f98bff3d-38e2-4af1-b9c3-8ed1487ad39a') && canDeleteUsersByPermissions
 
   const filteredUsers = users.filter(user =>
     user.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
     user.matricula.toString().includes(searchTerm.toLowerCase())
   )
+
+  const groupedFunctionalities = useMemo(() => {
+    const groups: Record<string, Funcionalidade[]> = {}
+    functionalities.forEach((func) => {
+      const groupName = (func as unknown as { modulos?: { nome?: string } }).modulos?.nome || 'Outros módulos'
+      if (!groups[groupName]) {
+        groups[groupName] = []
+      }
+      groups[groupName].push(func)
+    })
+
+    return Object.entries(groups)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([moduleName, items]) => ({
+        moduleName,
+        items: items.sort((a, b) => a.nome.localeCompare(b.nome))
+      }))
+  }, [functionalities])
 
   // Função para exportar dados para Excel
   const exportToExcel = async () => {
@@ -885,29 +925,39 @@ export default function UsersPage() {
 
   return (
     <MainLayout>
-      <div className="space-y-6">
+      <div className="space-y-6" data-allowed-functionalities-count={availableUsersFunctionalities.length}>
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gerenciar Usuários</h1>
           <div className="flex gap-3">
-            <button
-              onClick={exportToExcel}
-              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-              title="Exportar lista de usuários para Excel"
-            >
-              <Download className="h-4 w-4" />
-              Exportar Excel
-            </button>
-            <button
-              onClick={() => {
-                setEditingUser(null)
-                resetForm()
-                setShowModal(true)
-              }}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Novo Usuário
-            </button>
+            {permissionsLoaded && canExportUsers && (
+              <>
+                {/* TODO: Vincule este bot�o � funcionalidade de exportar usu�rios preenchendo EXPORT_USERS_FUNC_SLUG. */}
+                <button
+                  onClick={exportToExcel}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                  title="Exportar lista de usu�rios para Excel"
+                >
+                  <Download className="h-4 w-4" />
+                  Exportar Excel
+                </button>
+              </>
+            )}
+            {permissionsLoaded && canCreateUser && (
+              <>
+                {/* TODO: Vincule este bot�o � funcionalidade de cria��o preenchendo CREATE_USER_FUNC_SLUG. */}
+                <button
+                  onClick={() => {
+                    setEditingUser(null)
+                    resetForm()
+                    setShowModal(true)
+                  }}
+                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+                >
+                  <Plus className="h-4 w-4" />
+                  Novo Usuário
+                </button>
+              </>
+            )}
           </div>
         </div>
 
@@ -989,36 +1039,54 @@ export default function UsersPage() {
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                         <div className="flex space-x-2">
-                          <button
-                            onClick={() => handleEdit(user)}
-                            className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                            title="Editar usuário"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleManageContracts(user)}
-                            className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
-                            title="Gerenciar contratos"
-                          >
-                            <Settings className="h-4 w-4" />
-                          </button>
-                          <button
-                            onClick={() => handleManageFunctionalities(user)}
-                            className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300"
-                            title="Gerenciar funcionalidades"
-                          >
-                            <Shield className="h-4 w-4" />
-                          </button>
-                          {canDeleteUsers  && (
-                            <button
-                              onClick={() => handleDelete(user)}
-                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                              title="Excluir usuário"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
+                          {canEditUsers && (
+  <>
+    {/* TODO: Vincule este bot�o � funcionalidade de edi��o preenchendo EDIT_USER_FUNC_SLUG. */}
+    <button
+      onClick={() => handleEdit(user)}
+      className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+      title="Editar usu�rio"
+    >
+      <Edit className="h-4 w-4" />
+    </button>
+  </>
+)}
+                          {canManageContracts && (
+  <>
+    {/* TODO: Vincule este bot�o � funcionalidade de gest�o de contratos preenchendo MANAGE_CONTRACTS_FUNC_SLUG. */}
+    <button
+      onClick={() => handleManageContracts(user)}
+      className="text-green-600 hover:text-green-900 dark:text-green-400 dark:hover:text-green-300"
+      title="Gerenciar contratos"
+    >
+      <Settings className="h-4 w-4" />
+    </button>
+  </>
+)}
+                          {canManageFunctionalities && (
+  <>
+    {/* TODO: Vincule este bot�o � funcionalidade de gest�o de funcionalidades preenchendo MANAGE_FUNCTIONALITIES_FUNC_SLUG. */}
+    <button
+      onClick={() => handleManageFunctionalities(user)}
+      className="text-purple-600 hover:text-purple-900 dark:text-purple-400 dark:hover:text-purple-300"
+      title="Gerenciar funcionalidades"
+    >
+      <Shield className="h-4 w-4" />
+    </button>
+  </>
+)}
+                          {canDeleteUsers && (
+  <>
+    {/* TODO: Vincule este bot�o � funcionalidade de exclus�o preenchendo DELETE_USER_FUNC_SLUG. */}
+    <button
+      onClick={() => handleDelete(user)}
+      className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+      title="Excluir usu�rio"
+    >
+      <Trash2 className="h-4 w-4" />
+    </button>
+  </>
+)}
                         </div>
                       </td>
                     </tr>
@@ -1067,44 +1135,53 @@ export default function UsersPage() {
                         Nenhuma funcionalidade encontrada
                       </div>
                     ) : (
-                      <div className="space-y-2 max-h-96 overflow-y-auto">
-                        {functionalities.map((functionality) => {
-                          const hasAccess = isUserHasFunctionality(functionality.id)
-                          return (
-                            <div
-                              key={functionality.id}
-                              className="grid grid-cols-[1fr_auto] gap-4 p-3 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
-                            >
-                              <div className="min-w-0 space-y-1">
-                                <div className="font-medium text-gray-900 dark:text-white break-words text-wrap">
-                                  {functionality.nome}
-                                </div>
-                                {functionality.descricao && (
-                                  <div className="text-sm text-gray-500 dark:text-gray-400 break-words text-wrap leading-relaxed">
-                                    Descrição: {functionality.descricao}
-                                  </div>
-                                )}
-                                <div className="text-xs text-gray-400 dark:text-gray-500">
-                                  Status: {functionality.ativa ? 'Ativo' : 'Inativo'}
-                                </div>
-                              </div>
-                              <div className="flex flex-col items-end justify-center space-y-2">
-                                <label className="relative inline-flex items-center cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={hasAccess}
-                                    onChange={() => handleToggleFunctionalityAccess(functionality.id, hasAccess)}
-                                    className="sr-only peer"
-                                  />
-                                  <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 dark:peer-focus:ring-purple-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600"></div>
-                                </label>
-                                <span className="text-xs text-gray-600 dark:text-gray-300 text-center whitespace-nowrap">
-                                  {hasAccess ? 'Tem acesso' : 'Sem acesso'}
-                                </span>
-                              </div>
+                      <div className="space-y-4 max-h-96 overflow-y-auto">
+                        {groupedFunctionalities.map(({ moduleName, items }) => (
+                          <div key={moduleName} className="space-y-2">
+                            <div className="text-xs font-semibold uppercase text-gray-500 dark:text-gray-400 px-1">
+                              {moduleName}
                             </div>
-                          )
-                        })}
+                            <div className="space-y-2">
+                              {items.map((functionality) => {
+                                const hasAccess = isUserHasFunctionality(functionality.id)
+                                return (
+                                  <div
+                                    key={functionality.id}
+                                    className="grid grid-cols-[1fr_auto] gap-4 p-3 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700"
+                                  >
+                                    <div className="min-w-0 space-y-1">
+                                      <div className="font-medium text-gray-900 dark:text-white break-words text-wrap">
+                                        {functionality.nome}
+                                      </div>
+                                      {functionality.descricao && (
+                                        <div className="text-sm text-gray-500 dark:text-gray-400 break-words text-wrap leading-relaxed">
+                                          Descrição: {functionality.descricao}
+                                        </div>
+                                      )}
+                                      <div className="text-xs text-gray-400 dark:text-gray-500">
+                                        Status: {functionality.ativa ? 'Ativo' : 'Inativo'}
+                                      </div>
+                                    </div>
+                                    <div className="flex flex-col items-end justify-center space-y-2">
+                                      <label className="relative inline-flex items-center cursor-pointer">
+                                        <input
+                                          type="checkbox"
+                                          checked={hasAccess}
+                                          onChange={() => handleToggleFunctionalityAccess(functionality.id, hasAccess)}
+                                          className="sr-only peer"
+                                        />
+                                        <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-purple-300 dark:peer-focus:ring-purple-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-purple-600"></div>
+                                      </label>
+                                      <span className="text-xs text-gray-600 dark:text-gray-300 text-center whitespace-nowrap">
+                                        {hasAccess ? 'Tem acesso' : 'Sem acesso'}
+                                      </span>
+                                    </div>
+                                  </div>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     )}
 
@@ -1527,3 +1604,18 @@ export default function UsersPage() {
     </MainLayout>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
