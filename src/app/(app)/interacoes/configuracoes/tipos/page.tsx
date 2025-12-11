@@ -13,7 +13,6 @@ import {
   CheckCircle,
   Building2
 } from 'lucide-react'
-import MainLayout from '@/components/Layout/MainLayout'
 import { toast } from 'sonner'
 
 interface Contrato {
@@ -232,7 +231,7 @@ export default function ConfiguracoesTipos() {
   }
 
   return (
-    <MainLayout>
+    
       <div className="p-6">
         <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
@@ -395,6 +394,8 @@ export default function ConfiguracoesTipos() {
           </div>
         )}
       </div>
-    </MainLayout>
+    
   )
 }
+
+

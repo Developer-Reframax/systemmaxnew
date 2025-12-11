@@ -23,7 +23,6 @@ import {
   SelectItem,
 } from '@/components/ui/select';
 import { useAuth } from '@/hooks/useAuth';
-import MainLayout from '@/components/Layout/MainLayout';
 
 interface Item {
   id: string;
@@ -273,19 +272,19 @@ function CatalogoItens() {
 
   if (authLoading || loading) {
     return (
-      <MainLayout>
-        <div className="flex items-center justify-center min-h-[400px]">
-          <div className="flex items-center space-x-2">
-            <RefreshCw className="h-6 w-6 animate-spin" />
-            <span>Carregando catálogo...</span>
-          </div>
+
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="flex items-center space-x-2">
+          <RefreshCw className="h-6 w-6 animate-spin" />
+          <span>Carregando catálogo...</span>
         </div>
-      </MainLayout>
+      </div>
+
     );
   }
 
   return (
-    <MainLayout>
+    <>
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center space-x-4">
@@ -510,8 +509,9 @@ function CatalogoItens() {
           </Button>
         </div>
       )}
-    </MainLayout>
+    </>
   );
 }
 
 export default CatalogoItens
+

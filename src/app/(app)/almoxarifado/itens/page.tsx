@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Package, Plus, Edit, Trash2, Search, Upload, X, Save, AlertTriangle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
-import MainLayout from '@/components/Layout/MainLayout'
 
 interface Item {
   id: string
@@ -314,7 +313,7 @@ function GerenciamentoItens() {
 
   if (loading || authLoading) {
     return (
-      <MainLayout>
+      
         <div className="min-h-screen bg-gray-50 p-6">
           <div className="max-w-6xl mx-auto">
             <div className="bg-white rounded-lg shadow-sm p-8 text-center">
@@ -323,12 +322,12 @@ function GerenciamentoItens() {
             </div>
           </div>
         </div>
-      </MainLayout>
+      
     )
   }
 
   return (
-    <MainLayout>
+    
       <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
@@ -695,8 +694,9 @@ function GerenciamentoItens() {
         )}
       </div>
       </div>
-    </MainLayout>
+    
   )
 }
 
 export default GerenciamentoItens
+

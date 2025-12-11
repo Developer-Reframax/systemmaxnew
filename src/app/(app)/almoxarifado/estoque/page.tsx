@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Package, TrendingUp, TrendingDown, RotateCcw, Calendar, User, Search, Filter, ChevronLeft, ChevronRight, Plus, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
-import MainLayout from '@/components/Layout/MainLayout'
 
 interface MovimentacaoEstoque {
   id: string
@@ -351,16 +350,16 @@ function EstoquePage() {
 
   if (authLoading || loading) {
     return (
-      <MainLayout>
+      
         <div className="flex items-center justify-center min-h-screen">
           <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
         </div>
-      </MainLayout>
+      
     )
   }
 
   return (
-    <MainLayout>
+    
       <div className="space-y-6">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
@@ -817,8 +816,9 @@ function EstoquePage() {
           )}
         </div>
       </div>
-    </MainLayout>
+    
   )
 }
 
 export default EstoquePage
+

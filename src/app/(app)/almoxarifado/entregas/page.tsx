@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Truck, Package, CheckCircle, User, Calendar, Clock, Eye, AlertCircle } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
-import MainLayout from '@/components/Layout/MainLayout'
 
 interface RequisitionItem {
   id: string
@@ -209,7 +208,7 @@ function Entregas() {
 
   if (loading || authLoading) {
     return (
-      <MainLayout>
+      
         <div className="min-h-screen bg-gray-50 p-6">
           <div className="max-w-6xl mx-auto">
             <div className="bg-white rounded-lg shadow-sm p-8 text-center">
@@ -218,12 +217,12 @@ function Entregas() {
             </div>
           </div>
         </div>
-      </MainLayout>
+      
     )
   }
 
   return (
-    <MainLayout>
+    
       <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
         {/* Header */}
@@ -645,8 +644,9 @@ function Entregas() {
         )}
       </div>
       </div>
-    </MainLayout>
+    
   )
 }
 
 export default Entregas
+

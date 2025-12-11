@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import MainLayout from '@/components/Layout/MainLayout'
 import { supabase } from '@/lib/supabase'
 import { Download, Users, Building, BookOpen, AlertTriangle, BarChart3, PieChart, TrendingUp } from 'lucide-react'
 import { toast } from 'sonner'
@@ -330,16 +329,16 @@ export default function ReportsPage() {
 
   if (!user || (user.role !== 'Admin' && user.role !== 'Editor')) {
     return (
-      <MainLayout>
+      
         <div className="flex items-center justify-center h-64">
           <p className="text-gray-500">Acesso negado. Apenas administradores e editores podem visualizar relatórios.</p>
         </div>
-      </MainLayout>
+      
     )
   }
 
   return (
-    <MainLayout>
+    
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Relatórios e Analytics</h1>
@@ -621,6 +620,8 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
-    </MainLayout>
+    
   )
 }
+
+

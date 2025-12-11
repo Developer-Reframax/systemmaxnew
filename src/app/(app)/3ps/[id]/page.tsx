@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { ArrowLeft, Edit, Target, Clock, MapPin, Calendar, User, CheckCircle, AlertCircle, Play, Users, FileText } from 'lucide-react'
-import MainLayout from '@/components/Layout/MainLayout'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
@@ -113,18 +112,18 @@ export default function Detalhes3P() {
 
   if (loading) {
     return (
-      <MainLayout>
+      
         <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
           <p className="ml-3 text-gray-600">Carregando registro 3P...</p>
         </div>
-      </MainLayout>
+      
     )
   }
 
   if (!registro) {
     return (
-      <MainLayout>
+      
         <div className="text-center py-12">
           <Target className="h-12 w-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
@@ -138,12 +137,12 @@ export default function Detalhes3P() {
             Voltar para Dashboard
           </Link>
         </div>
-      </MainLayout>
+      
     )
   }
 
   return (
-    <MainLayout>
+    
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -403,6 +402,6 @@ export default function Detalhes3P() {
           </div>
         </div>
       </div>
-    </MainLayout>
+    
   )
 }
