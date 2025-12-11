@@ -1,32 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
+
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-// Função para verificar o token JWT
-function verifyToken(token: string): { contrato_raiz: string; matricula: string } | null {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET!) as { contrato_raiz: string; matricula: string }
-  } catch {
-    return null
-  }
-}
+const AUTH_ERROR = { error: 'Token de acesso requerido' }
+
 
 // PUT - Atualizar tipo de interação
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ success: false, message: 'Token de autorização necessário' }, { status: 401 })
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json(AUTH_ERROR, { status: 401 })
     }
-
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    if (!decoded) {
-      return NextResponse.json({ success: false, message: 'Token inválido' }, { status: 401 })
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     const { id } = await params

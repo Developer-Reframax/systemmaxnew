@@ -11,11 +11,6 @@ interface SessionEventPayload {
   occurred_at?: string
 }
 
-function getAuthToken() {
-  if (typeof window === 'undefined') return null
-  return localStorage.getItem('auth_token')
-}
-
 export function getActiveSessionId() {
   if (typeof window === 'undefined') return null
   return sessionStorage.getItem(SESSION_STORAGE_KEY)
@@ -38,14 +33,10 @@ async function callSessionApi(
   body: Record<string, unknown>,
   options?: { keepalive?: boolean }
 ) {
-  const token = getAuthToken()
-  if (!token) return { ok: false }
-
   const response = await fetch('/api/sessions', {
     method,
     headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${token}`
+      'Content-Type': 'application/json'
     },
     body: JSON.stringify(body),
     keepalive: options?.keepalive === true

@@ -1,7 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
-import { verifyTokenClient, isTokenExpired, decodeTokenPayload } from '@/lib/auth-client'
+import React, { useEffect, useState } from 'react'
 import type { AuthUser } from '@/lib/auth'
 import type { AuthContextType, AuthProviderProps } from '@/lib/types/auth'
 import { hasRole, isAuthenticated, checkVerificationComplete } from '@/lib/auth-utils'
@@ -17,9 +16,9 @@ import {
 } from '@/lib/session-tracker'
 import { AuthContext } from './AuthContextDefinition'
 
-export function AuthProvider({ children }: AuthProviderProps) {
-  const [user, setUser] = useState<AuthUser | null>(null)
-  const [loading, setLoading] = useState(true)
+export function AuthProvider({ children, initialUser = null }: AuthProviderProps) {
+  const [user, setUser] = useState<AuthUser | null>(initialUser ?? null)
+  const [loading, setLoading] = useState(!initialUser)
   const {
     isLoading: verificationLoading,
     showTermsModal,
@@ -29,87 +28,49 @@ export function AuthProvider({ children }: AuthProviderProps) {
     isVerificationComplete
   } = useVerification()
 
-  // Initialize authentication on mount
   useEffect(() => {
     const initAuth = async () => {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) {
-        setUser(null)
-        setLoading(false)
-        return
-      }
-
-      const hasSession = typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_STORAGE_KEY) : null
-      if (!hasSession) {
-        const staleSessionId = typeof window !== 'undefined' ? localStorage.getItem(LAST_SESSION_KEY) : null
-        if (staleSessionId) {
-          await endSpecificSession(staleSessionId, 'stale')
-        }
-        clearStoredSession()
-        localStorage.removeItem('auth_token')
-        setUser(null)
-        setLoading(false)
-        return
-      }
-
-      // Verificações em paralelo: expiração local, verificação no servidor e decodificação
-      const [expired, userData] = await Promise.all([
-        Promise.resolve(isTokenExpired(token)),
-        verifyTokenClient(token)
-      ])
-
-      if (expired) {
-        localStorage.removeItem('auth_token')
-        clearStoredSession()
-        setUser(null)
-        setLoading(false)
-        return
-      }
-
-      if (userData) {
-        setUser(userData)
+      if (initialUser) {
+        setUser(initialUser)
         startVerification()
-      } else {
-        // Fallback: se a verificação falhar mas o token ainda tiver exp futuro, podemos decodificar para UX mínima
-        const payload = decodeTokenPayload(token)
-        if (payload && typeof payload.exp === 'number' && payload.exp > Math.floor(Date.now() / 1000)) {
-          setUser({
-            matricula: payload.matricula as number,
-            nome: payload.nome as string,
-            email: payload.email as string,
-            role: payload.role as 'Admin' | 'Editor' | 'Usuario',
-            funcao: payload.funcao as string | undefined,
-            contrato_raiz: payload.contrato_raiz as string | undefined,
-            tipo: payload.tipo as string | undefined
-          })
-          startVerification()
-        } else {
-          localStorage.removeItem('auth_token')
+        setLoading(false)
+        return
+      }
+
+      try {
+        const hasSession =
+          typeof window !== 'undefined' ? sessionStorage.getItem(SESSION_STORAGE_KEY) : null
+        if (!hasSession) {
+          const staleSessionId =
+            typeof window !== 'undefined' ? localStorage.getItem(LAST_SESSION_KEY) : null
+          if (staleSessionId) {
+            await endSpecificSession(staleSessionId, 'stale')
+          }
           clearStoredSession()
+        }
+
+        const response = await fetch('/api/auth/me', { method: 'GET' })
+        if (response.ok) {
+          const data = await response.json()
+          if (data.authenticated && data.user) {
+            setUser(data.user)
+            startVerification()
+          } else {
+            setUser(null)
+          }
+        } else {
           setUser(null)
         }
-      }
-
-      setLoading(false)
-    }
-
-    initAuth()
-  }, [startVerification])
-
-  // Função para forçar logout e relogin (para debug)
-  useEffect(() => {
-    const forceRelogin = () => {
-      const shouldForceRelogin = typeof window !== 'undefined' ? localStorage.getItem('force_relogin') : null
-      if (shouldForceRelogin === 'true') {
-        localStorage.removeItem('force_relogin')
-        localStorage.removeItem('auth_token')
-        clearStoredSession()
+      } catch (error) {
+        console.error('Erro ao inicializar autenticaÇõÇœo:', error)
         setUser(null)
-        window.location.reload()
+      } finally {
+        setLoading(false)
       }
     }
-    forceRelogin()
-  }, [])
+
+    void initAuth()
+  }, [initialUser, startVerification])
 
   const login = async (identifier: string, password: string) => {
     try {
@@ -118,21 +79,20 @@ export function AuthProvider({ children }: AuthProviderProps) {
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ email: identifier, password })
       })
-      
+
       const data = await response.json()
-      
-      if (data.success && data.user && data.token) {
 
+      if (response.ok && data.success && data.user) {
         setUser(data.user)
-        localStorage.setItem('auth_token', data.token)
 
-        const currentPath = typeof window !== 'undefined'
-          ? window.location.pathname + window.location.search
-          : '/'
+        const currentPath =
+          typeof window !== 'undefined'
+            ? window.location.pathname + window.location.search
+            : '/'
         await startUserSession(currentPath)
 
         startVerification()
@@ -149,17 +109,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }
 
   const logout = async () => {
-
     try {
+      await fetch('/api/auth/logout', { method: 'POST' })
       await endUserSession('logout')
     } catch (error) {
-      console.error('Erro ao finalizar sessão:', error)
+      console.error('Erro ao finalizar sessÇœo:', error)
     }
 
     setUser(null)
     clearStoredSession()
-    localStorage.removeItem('auth_token')
-
   }
 
   const value: AuthContextType = {
@@ -175,25 +133,11 @@ export function AuthProvider({ children }: AuthProviderProps) {
   return (
     <AuthContext.Provider value={value}>
       {children}
-      
-      {/* Modal de Termos de Uso */}
+
       {showTermsModal && (
-        <TermsModal
-          isOpen={showTermsModal}
-          onAccept={acceptTerms}
-          onDecline={declineTerms}
-        />
+        <TermsModal isOpen={showTermsModal} onAccept={acceptTerms} onDecline={declineTerms} />
       )}
-      
-      {/* Modal de Dados Obrigatórios - DESABILITADO */}
-      {/* {showDataModal && (
-        <UserDataModal
-          isOpen={showDataModal}
-          missingFields={verificationStatus?.missingFields || []}
-          onComplete={updateUserData}
-          userContractCode={user?.contrato_raiz || ''}
-        />
-      )} */}
     </AuthContext.Provider>
   )
 }
+

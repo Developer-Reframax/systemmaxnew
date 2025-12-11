@@ -239,7 +239,6 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
   // 🆔 FUNÇÃO PARA CADASTRAR O DESVIO ANTECIPADAMENTE
   const cadastrarDesvioAntecipado = async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       
       const desvioData = {
         descricao: formData.descricao,
@@ -259,10 +258,6 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       
       const response = await fetch('/api/desvios', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${auth_token}`
-        },
         body: JSON.stringify(desvioData)
       })
       
@@ -466,11 +461,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
   // Funções de carregamento de dados
   const loadNaturezas = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/security-params/natures', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+       method: 'GET'
       })
       
       if (response.ok) {
@@ -484,11 +476,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
 
   const loadTipos = useCallback(async (naturezaId: string) => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch(`/api/security-params/types?nature_id=${naturezaId}`, {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -502,11 +491,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
 
   const loadPotenciais = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/security-params/potentials', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -520,11 +506,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
 
   const loadRiscosAssociados = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/security-params/associated-risks', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -538,11 +521,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
 
   const loadLocais = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/security-params/locations', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -941,18 +921,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
         const uploadFormData = new FormData()
         uploadFormData.append('file', file)
         
-        // Recuperar token de autenticação
-        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-        if (!token) {
-          toast.error('Token de autenticação não encontrado')
-          continue
-        }
-        
         const uploadResponse = await fetch('/api/desvios/upload-image', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
           body: uploadFormData
         })
         
@@ -986,10 +956,6 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
             
             const cadastroResponse = await fetch('/api/desvios/imagens', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
               body: JSON.stringify(imagemData)
             })
             

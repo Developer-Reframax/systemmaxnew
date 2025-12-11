@@ -9,15 +9,14 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token nao fornecido' }, { status: 401 })
+    // Verificar autenticação
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
     }
-
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    if (!decoded) {
-      return NextResponse.json({ error: 'Token invalido' }, { status: 401 })
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -45,15 +44,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token nao fornecido' }, { status: 401 })
+    // Verificar autenticação
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
     }
-
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    if (!decoded || decoded.role !== 'Admin') {
-      return NextResponse.json({ error: 'Apenas administradores podem alterar módulos do contrato' }, { status: 403 })
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     const { modulo_id, codigo_contrato } = await request.json()
@@ -81,15 +79,14 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token nao fornecido' }, { status: 401 })
+    // Verificar autenticação
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
     }
-
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    if (!decoded || decoded.role !== 'Admin') {
-      return NextResponse.json({ error: 'Apenas administradores podem alterar módulos do contrato' }, { status: 403 })
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     const { modulo_id, codigo_contrato } = await request.json()

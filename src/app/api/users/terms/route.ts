@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
@@ -9,33 +9,23 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey)
 export async function PUT(request: NextRequest) {
   try {
     // Verificar token de autenticação
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, message: 'Token de autenticação não encontrado' },
-        { status: 401 }
-      )
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
+    }
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
-    const token = authHeader.substring(7)
-    let decoded: jwt.JwtPayload | string
 
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET!)
-    } catch {
-      return NextResponse.json(
-        { success: false, message: 'Token inválido' },
-        { status: 401 }
-      )
-    }
-
-    if (typeof decoded === 'string' || !decoded.matricula) {
+    if (!token || !user.matricula) {
       return NextResponse.json(
         { success: false, message: 'Token inválido: matrícula não encontrada' },
         { status: 401 }
       )
     }
-    const matricula = decoded.matricula
+    const matricula = user.matricula
 
     // Obter dados da requisição
     const body = await request.json()
@@ -51,7 +41,7 @@ export async function PUT(request: NextRequest) {
     // Atualizar aceitação de termos
     const { error } = await supabase
       .from('usuarios')
-      .update({ 
+      .update({
         termos: accepted,
         updated_at: new Date().toISOString()
       })

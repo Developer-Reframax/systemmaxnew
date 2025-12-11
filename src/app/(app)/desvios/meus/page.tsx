@@ -1,0 +1,527 @@
+'use client'
+
+import React, { useState, useEffect, useCallback } from 'react'
+import {
+  AlertTriangle,
+  Clock,
+  Eye,
+  Edit,
+  Trash2,
+  Search,
+  Calendar,
+  MapPin,
+  User,
+  Plus,
+  ChevronLeft,
+  ChevronRight
+} from 'lucide-react'
+import FormularioConversacional from '@/components/desvios/FormularioConversacional'
+import { toast } from 'sonner'
+
+interface Desvio {
+  id: string
+  titulo: string
+  descricao: string
+  local: string
+  data_ocorrencia: string
+  status: string
+  gravidade: string
+  potencial: string
+  potencial_local: string | null
+  ver_agir: boolean
+  data_limite: string | null
+  created_at: string
+  natureza: { natureza: string }
+  tipo: { tipo: string }
+  responsavel: { nome: string } | null
+}
+
+interface PaginationInfo {
+  page: number
+  limit: number
+  total: number
+  totalPages: number
+}
+
+export default function MeusDesvios() {
+  const [desvios, setDesvios] = useState<Desvio[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showFormularioConversacional, setShowFormularioConversacional] = useState(false)
+  const [pagination, setPagination] = useState<PaginationInfo>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 0
+  })
+  
+  // Filtros
+  const [filters, setFilters] = useState({
+    search: '',
+    status: '',
+    gravidade: '',
+    data_inicio: '',
+    data_fim: ''
+  })
+
+  const loadDesvios = useCallback(async () => {
+    try {
+      setLoading(true)
+      
+
+      const params = new URLSearchParams({
+        page: pagination.page.toString(),
+        limit: pagination.limit.toString(),
+        meus: 'true', // Filtrar apenas desvios do usuário logado
+        ...Object.fromEntries(
+          Object.entries(filters).filter(([, value]) => value !== '')
+        )
+      })
+
+      const response = await fetch(`/api/desvios?${params}`, {
+        method: 'GET'
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao carregar desvios')
+      }
+
+      const data = await response.json()
+      
+      if (data.success) {
+        setDesvios(data.data)
+        setPagination(prev => ({
+          ...prev,
+          total: data.pagination.total,
+          totalPages: data.pagination.totalPages
+        }))
+      } else {
+        toast.error(data.message || 'Erro ao carregar desvios')
+      }
+      
+    } catch (error) {
+      console.error('Error loading desvios:', error)
+      toast.error('Erro ao carregar desvios')
+    } finally {
+      setLoading(false)
+    }
+  }, [pagination.page, pagination.limit, filters])
+
+  useEffect(() => {
+    loadDesvios()
+  }, [loadDesvios])
+
+  const handleFilterChange = (field: string, value: string) => {
+    setFilters(prev => ({ ...prev, [field]: value }))
+    setPagination(prev => ({ ...prev, page: 1 })) // Reset para primeira página
+  }
+
+  const clearFilters = () => {
+    setFilters({
+      search: '',
+      status: '',
+      gravidade: '',
+      data_inicio: '',
+      data_fim: ''
+    })
+  }
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Tem certeza que deseja excluir este desvio?')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/desvios/${id}`, {
+        method: 'DELETE'
+        
+      })
+
+      if (response.ok) {
+        toast.success('Desvio excluído com sucesso')
+        loadDesvios()
+      } else {
+        const data = await response.json()
+        toast.error(data.message || 'Erro ao excluir desvio')
+      }
+    } catch (error) {
+      console.error('Error deleting desvio:', error)
+      toast.error('Erro ao excluir desvio')
+    }
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Aguardando Avaliação': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
+      case 'Em Andamento': return 'bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-300'
+      case 'Concluído': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+      case 'Vencido': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300'
+    }
+  }
+
+  const getPotencialColor = (potencial: string) => {
+    switch (potencial) {
+      case 'Trivial': return 'bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-300'
+      case 'Moderado': return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-300'
+      case 'Substancial': return 'bg-orange-100 text-orange-800 dark:bg-orange-900/20 dark:text-orange-300'
+      case 'Intolerável': return 'bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300'
+      default: return 'bg-gray-100 text-gray-800 dark:bg-gray-900/20 dark:text-gray-300'
+    }
+  }
+
+  const formatDate = (dateString: string) => {
+    if (!dateString) return '-'
+    try {
+      return new Date(dateString).toLocaleDateString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      })
+    } catch {
+      return '-'
+    }
+  }
+
+  const truncateText = (text: string, maxLength: number = 100) => {
+    if (!text) return '-'
+    return text.length > maxLength ? `${text.substring(0, maxLength)}...` : text
+  }
+
+  const isVencido = (dataLimite: string | null, status: string) => {
+    if (!dataLimite || status === 'Concluído') return false
+    return new Date(dataLimite) < new Date()
+  }
+
+  return (
+      <div className="space-y-6">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-indigo-600 rounded-lg shadow-lg p-6 text-white">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center">
+              <User className="h-12 w-12 mr-4" />
+              <div>
+                <h1 className="text-2xl font-bold">Meus Desvios</h1>
+                <p className="text-blue-100 mt-1">
+                  Gerencie seus relatos de desvios de segurança
+                </p>
+                <p className="text-blue-200 text-sm mt-1">
+                  Total: {pagination.total} desvios
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowFormularioConversacional(true)}
+              className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 transition-colors flex items-center"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Novo Desvio
+            </button>
+          </div>
+        </div>
+
+        {/* Filtros */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div className="lg:col-span-2">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Buscar
+              </label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  value={filters.search}
+                  onChange={(e) => handleFilterChange('search', e.target.value)}
+                  placeholder="Título, descrição ou local..."
+                  className="pl-10 w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+                />
+              </div>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Status
+              </label>
+              <select
+                value={filters.status}
+                onChange={(e) => handleFilterChange('status', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="">Todos</option>
+                <option value="Aguardando Avaliação">Aguardando Avaliação</option>
+                <option value="Em Andamento">Em Andamento</option>
+                <option value="Concluído">Concluído</option>
+                <option value="Vencido">Vencido</option>
+              </select>
+            </div>
+            
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Gravidade
+              </label>
+              <select
+                value={filters.gravidade}
+                onChange={(e) => handleFilterChange('gravidade', e.target.value)}
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:text-white"
+              >
+                <option value="">Todas</option>
+                <option value="Baixa">Baixa</option>
+                <option value="Média">Média</option>
+                <option value="Alta">Alta</option>
+                <option value="Crítica">Crítica</option>
+              </select>
+            </div>
+            
+            <div className="flex items-end">
+              <button
+                onClick={clearFilters}
+                className="w-full px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors"
+              >
+                Limpar Filtros
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Lista de Desvios */}
+        <div className="bg-white dark:bg-gray-800 shadow rounded-lg">
+          {loading ? (
+            <div className="flex items-center justify-center h-64">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          ) : desvios.length === 0 ? (
+            <div className="text-center py-12">
+              <AlertTriangle className="h-12 w-12 text-gray-400 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                Nenhum desvio encontrado
+              </h3>
+              <p className="text-gray-500 dark:text-gray-400 mb-4">
+                {Object.values(filters).some(v => v !== '') 
+                  ? 'Tente ajustar os filtros de busca'
+                  : 'Você ainda não possui desvios cadastrados'
+                }
+              </p>
+              <button
+                onClick={() => setShowFormularioConversacional(true)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg font-medium hover:bg-blue-700 transition-colors flex items-center mx-auto"
+              >
+                <Plus className="h-4 w-4 mr-2" />
+                Criar Primeiro Desvio
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="overflow-x-auto">
+                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-600">
+                  <thead className="bg-gray-50 dark:bg-gray-700">
+                    <tr>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider w-2/5">
+                        Desvio
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Status
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Potencial
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Data
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Responsável
+                      </th>
+                      <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                        Ações
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
+                    {desvios.map((desvio) => (
+                      <tr key={desvio.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                        <td className="px-6 py-4 w-2/5">
+                          <div className="flex items-start">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center mb-2">
+                                {desvio.ver_agir && (
+                                  <span className="mr-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                                    <Clock className="h-3 w-3 mr-1" />
+                                    Ver & Agir
+                                  </span>
+                                )}
+                                {isVencido(desvio.data_limite, desvio.status) && (
+                                  <span className="mr-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-300">
+                                    Vencido
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-sm font-medium text-gray-900 dark:text-white mb-2 leading-relaxed">
+                                {truncateText(desvio.descricao, 150)}
+                              </p>
+                              <div className="flex items-center mt-1 text-sm text-gray-500 dark:text-gray-400">
+                                <MapPin className="h-4 w-4 mr-1" />
+                                <span className="truncate">{desvio.local}</span>
+                              </div>
+                              <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+                                {desvio.natureza?.natureza} • {desvio.tipo?.tipo}
+                              </p>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(desvio.status)}`}>
+                            {desvio.status}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          <div className="flex flex-col space-y-1">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPotencialColor(desvio.potencial)}`}>
+                              {desvio.potencial}
+                            </span>
+                            {desvio.potencial_local && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400">
+                                Local: {desvio.potencial_local}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          <div className="flex items-center">
+                            <Calendar className="h-4 w-4 mr-1" />
+                            {formatDate(desvio.created_at)}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                          {desvio.responsavel ? desvio.responsavel.nome : '-'}
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                          <div className="flex items-center justify-end space-x-2">
+                            <button
+                              onClick={() => window.location.href = `/desvios/${desvio.id}`}
+                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                              title="Visualizar"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
+                            {desvio.status === 'Aguardando Avaliação' && (
+                              <>
+                                <button
+                                  onClick={() => window.location.href = `/desvios/${desvio.id}/editar`}
+                                  className="text-yellow-600 hover:text-yellow-900 dark:text-yellow-400 dark:hover:text-yellow-300"
+                                  title="Editar"
+                                >
+                                  <Edit className="h-4 w-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(desvio.id)}
+                                  className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                                  title="Excluir"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Paginação */}
+              {pagination.totalPages > 1 && (
+                <div className="bg-white dark:bg-gray-800 px-4 py-3 flex items-center justify-between border-t border-gray-200 dark:border-gray-600 sm:px-6">
+                  <div className="flex-1 flex justify-between sm:hidden">
+                    <button
+                      onClick={() => setPagination(prev => ({ ...prev, page: Math.max(prev.page - 1, 1) }))}
+                      disabled={pagination.page === 1}
+                      className="relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Anterior
+                    </button>
+                    <button
+                      onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.page + 1, prev.totalPages) }))}
+                      disabled={pagination.page === pagination.totalPages}
+                      className="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Próximo
+                    </button>
+                  </div>
+                  <div className="hidden sm:flex-1 sm:flex sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-sm text-gray-700 dark:text-gray-300">
+                        Mostrando{' '}
+                        <span className="font-medium">
+                          {(pagination.page - 1) * pagination.limit + 1}
+                        </span>{' '}
+                        até{' '}
+                        <span className="font-medium">
+                          {Math.min(pagination.page * pagination.limit, pagination.total)}
+                        </span>{' '}
+                        de{' '}
+                        <span className="font-medium">{pagination.total}</span>{' '}
+                        resultados
+                      </p>
+                    </div>
+                    <div>
+                      <nav className="relative z-0 inline-flex rounded-md shadow-sm -space-x-px" aria-label="Pagination">
+                        <button
+                          onClick={() => setPagination(prev => ({ ...prev, page: Math.max(prev.page - 1, 1) }))}
+                          disabled={pagination.page === 1}
+                          className="relative inline-flex items-center px-2 py-2 rounded-l-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <ChevronLeft className="h-5 w-5" />
+                        </button>
+                        
+                        {Array.from({ length: Math.min(5, pagination.totalPages) }, (_, i) => {
+                          let pageNum
+                          if (pagination.totalPages <= 5) {
+                            pageNum = i + 1
+                          } else if (pagination.page <= 3) {
+                            pageNum = i + 1
+                          } else if (pagination.page >= pagination.totalPages - 2) {
+                            pageNum = pagination.totalPages - 4 + i
+                          } else {
+                            pageNum = pagination.page - 2 + i
+                          }
+                          
+                          return (
+                            <button
+                              key={pageNum}
+                              onClick={() => setPagination(prev => ({ ...prev, page: pageNum }))}
+                              className={`relative inline-flex items-center px-4 py-2 border text-sm font-medium ${
+                                pageNum === pagination.page
+                                  ? 'z-10 bg-blue-50 dark:bg-blue-900/20 border-blue-500 text-blue-600 dark:text-blue-400'
+                                  : 'bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600'
+                              }`}
+                            >
+                              {pageNum}
+                            </button>
+                          )
+                        })}
+                        
+                        <button
+                          onClick={() => setPagination(prev => ({ ...prev, page: Math.min(prev.page + 1, prev.totalPages) }))}
+                          disabled={pagination.page === pagination.totalPages}
+                          className="relative inline-flex items-center px-2 py-2 rounded-r-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm font-medium text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <ChevronRight className="h-5 w-5" />
+                        </button>
+                      </nav>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Formulário Conversacional */}
+        <FormularioConversacional
+          isOpen={showFormularioConversacional}
+          onClose={() => setShowFormularioConversacional(false)}
+          onSuccess={loadDesvios}
+        />
+      </div>
+  )
+}

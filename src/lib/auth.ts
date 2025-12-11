@@ -24,7 +24,6 @@ export interface LoginCredentials {
 export interface AuthResponse {
   success: boolean
   user?: AuthUser
-  token?: string
   message?: string
 }
 
@@ -158,12 +157,9 @@ export async function login(credentials: LoginCredentials): Promise<AuthResponse
       tipo: users.tipo
     }
     
-    const token = generateToken(authUser)
-    
     return {
       success: true,
       user: authUser,
-      token,
       message: 'Login realizado com sucesso'
     }
     

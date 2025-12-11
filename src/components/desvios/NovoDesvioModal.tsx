@@ -93,11 +93,8 @@ export default function NovoDesvioModal({ isOpen, onClose, onSuccess }: NovoDesv
 
   const loadNaturezas = async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/security-params/natures', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -111,11 +108,8 @@ export default function NovoDesvioModal({ isOpen, onClose, onSuccess }: NovoDesv
 
   const loadTipos = async (naturezaId: string) => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch(`/api/security-params/types?nature_id=${naturezaId}`, {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -203,15 +197,10 @@ export default function NovoDesvioModal({ isOpen, onClose, onSuccess }: NovoDesv
 
     try {
       setLoading(true)
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       
       // Criar o desvio
       const desvioResponse = await fetch('/api/desvios', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${auth_token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(formData)
       })
 
@@ -231,9 +220,6 @@ export default function NovoDesvioModal({ isOpen, onClose, onSuccess }: NovoDesv
 
           await fetch(`/api/desvios/${desvioId}/imagens`, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${auth_token}`
-            },
             body: imageFormData
           })
         }

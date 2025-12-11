@@ -132,11 +132,9 @@ export default function DocumentationBuilderPage() {
   const loadPages = useCallback(async () => {
     try {
       setLoading(true)
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
+      
       const response = await fetch('/api/documentation', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : ''
-        }
+        method: 'GET'
       })
 
       const data = await response.json()
@@ -181,7 +179,6 @@ export default function DocumentationBuilderPage() {
 
     setSaving(true)
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const method = editingId ? 'PUT' : 'POST'
       const payload = {
         ...form,
@@ -191,10 +188,6 @@ export default function DocumentationBuilderPage() {
 
       const response = await fetch('/api/documentation', {
         method,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
-        },
         body: JSON.stringify(payload)
       })
 
@@ -222,13 +215,8 @@ export default function DocumentationBuilderPage() {
 
     setSaving(true)
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/documentation', {
         method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: token ? `Bearer ${token}` : ''
-        },
         body: JSON.stringify({ id: editingId })
       })
 

@@ -51,23 +51,10 @@ export function PermissionsProvider({
         return
       }
 
-      const token =
-        typeof window !== 'undefined' ? window.localStorage.getItem('auth_token') : null
-      if (!token) {
-        setError('Token nao encontrado para carregar permissoes visuais')
-        setPermissions(null)
-        setLoading(false)
-        return
-      }
-
       try {
         setLoading(true)
         const params = new URLSearchParams({ contractCode: effectiveContract })
-        const response = await fetch(`/api/me/permissions?${params.toString()}`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        })
+        const response = await fetch(`/api/me/permissions?${params.toString()}`)
 
         if (!response.ok) {
           const message = `Erro ao carregar permissoes (${response.status})`
@@ -91,13 +78,20 @@ export function PermissionsProvider({
   )
 
   useEffect(() => {
-    if (user?.matricula) {
-      void fetchPermissions()
-    } else {
+    if (!user?.matricula) {
       setPermissions(null)
       setLoading(false)
+      return
     }
-  }, [fetchPermissions, user?.matricula])
+
+    if (initialPermissions) {
+      setPermissions(initialPermissions)
+      setLoading(false)
+      return
+    }
+
+    void fetchPermissions()
+  }, [fetchPermissions, initialPermissions, user?.matricula])
 
   const canAccessModule = useCallback(
     (slugModulo?: string | null) => {
@@ -106,7 +100,7 @@ export function PermissionsProvider({
         return true
       }
       if (loading || !permissions) {
-        return true
+        return false
       }
       return permissions.modulos.some((modulo) => modulo.slug === slugModulo)
     },
@@ -126,7 +120,7 @@ export function PermissionsProvider({
         return true
       }
       if (loading || !permissions) {
-        return true
+        return false
       }
 
       const modulo = getModuloComFuncionalidades(slugModulo)
@@ -176,19 +170,22 @@ export function usePermissions() {
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function useCanAccessModule(slugModulo: string): boolean {
-  const { canAccessModule } = usePermissions()
-  return useMemo(() => canAccessModule(slugModulo), [canAccessModule, slugModulo])
+  const { canAccessModule, loading } = usePermissions()
+  return useMemo(() => (loading ? false : canAccessModule(slugModulo)), [canAccessModule, loading, slugModulo])
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
 export function useCanAccessFuncionalidade(
   slugModulo: string,
   slugFuncionalidade: string
-): boolean {
-  const { canAccessFuncionalidade } = usePermissions()
+): { allowed: boolean; loading: boolean } {
+  const { canAccessFuncionalidade, loading } = usePermissions()
   return useMemo(
-    () => canAccessFuncionalidade(slugModulo, slugFuncionalidade),
-    [canAccessFuncionalidade, slugFuncionalidade, slugModulo]
+    () => ({
+      allowed: canAccessFuncionalidade(slugModulo, slugFuncionalidade),
+      loading
+    }),
+    [canAccessFuncionalidade, loading, slugFuncionalidade, slugModulo]
   )
 }
 
@@ -215,15 +212,19 @@ export function CanAccess({
   fallback = null,
   children
 }: CanAccessProps) {
+  const { loading } = usePermissions()
   const resolvedModuleSlug = moduleSlug || ''
   const resolvedFunctionalitySlug = functionalitySlug || ''
 
-  // Hooks precisam ser chamados de forma deterministica; usamos slugs vazios para retornar true.
   const moduleAllowed = useCanAccessModule(resolvedModuleSlug)
-  const functionalityAllowed = useCanAccessFuncionalidade(
+  const { allowed: functionalityAllowed, loading: functionalityLoading } = useCanAccessFuncionalidade(
     resolvedModuleSlug,
     resolvedFunctionalitySlug
   )
+
+  if (loading || functionalityLoading) {
+    return <>{fallback}</>
+  }
 
   const canSeeModule = moduleSlug ? moduleAllowed : true
   const canSeeFunctionality = functionalitySlug ? functionalityAllowed : true

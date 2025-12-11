@@ -1,16 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const jwtSecret = process.env.JWT_SECRET!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+const AUTH_ERROR = { ERROR: 'Token de acesso requerido'}
+
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
+    const authHeader = request.cookies.get('auth_token')?.value
     
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return NextResponse.json(
@@ -19,23 +20,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const token = authHeader.substring(7)
     const body = await request.json()
     const { matricula_usuario, inicio_sessao, paginas_acessadas, modulos_acessados } = body
     
     // Verificar token JWT
-    let decoded: jwt.JwtPayload | string
-    try {
-      decoded = jwt.verify(token, jwtSecret)
-    } catch {
-      return NextResponse.json(
-        { success: false, message: 'Token inválido' },
-        { status: 401 }
-      )
-    }
-
+    // Verificar autenticação/
+        const token = request.cookies.get('auth_token')?.value
+        if (!token){
+          return NextResponse.json(AUTH_ERROR, { status: 401})
+        }
+        const user = verifyToken (token)
+        if (!user){
+          return NextResponse.json ({error: 'Token invalido ou expirado'}, { status: 401 })
+        }
     // Verificar se a matrícula do token corresponde à da requisição
-    if (typeof decoded === 'object' && decoded !== null && 'matricula' in decoded && decoded.matricula !== matricula_usuario) {
+    if (user.matricula !== matricula_usuario) {
       return NextResponse.json(
         { success: false, message: 'Acesso negado' },
         { status: 403 }
@@ -87,24 +86,22 @@ export async function PUT(request: NextRequest) {
         { status: 401 }
       )
     }
-
-    const token = authHeader.substring(7)
     const body = await request.json()
     const { matricula_usuario, paginas_acessadas, modulos_acessados } = body
     
     // Verificar token JWT
-    let decoded: jwt.JwtPayload | string
-    try {
-      decoded = jwt.verify(token, jwtSecret)
-    } catch {
-      return NextResponse.json(
-        { success: false, message: 'Token inválido' },
-        { status: 401 }
-      )
-    }
+   // Verificar autenticação/
+       const token = request.cookies.get('auth_token')?.value
+       if (!token){
+         return NextResponse.json(AUTH_ERROR, { status: 401})
+       }
+       const user = verifyToken (token)
+       if (!user){
+         return NextResponse.json ({error: 'Token invalido ou expirado'}, { status: 401 })
+       }
 
     // Verificar se a matrícula do token corresponde à da requisição
-    if (typeof decoded === 'object' && decoded !== null && 'matricula' in decoded && decoded.matricula !== matricula_usuario) {
+    if (user.matricula !== matricula_usuario) {
       return NextResponse.json(
         { success: false, message: 'Acesso negado' },
         { status: 403 }

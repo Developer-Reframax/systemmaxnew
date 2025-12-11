@@ -238,11 +238,8 @@ export default function AvaliacaoConversacional({ isOpen, onClose, desvio, onSuc
     }
 
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch(`/api/desvios/${desvio.id}`, {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -260,11 +257,8 @@ export default function AvaliacaoConversacional({ isOpen, onClose, desvio, onSuc
 
   const loadPotenciais = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/security-params/potentials', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+       method: 'GET'
       })
       
       if (response.ok) {
@@ -278,11 +272,8 @@ export default function AvaliacaoConversacional({ isOpen, onClose, desvio, onSuc
 
   const loadRiscosAssociados = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/security-params/associated-risks', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -297,11 +288,8 @@ export default function AvaliacaoConversacional({ isOpen, onClose, desvio, onSuc
 
   const loadUsuarios = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/users', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -614,8 +602,6 @@ ${desvioInfo.imagens.map((img: ImagemDesvio, index: number) => `📷 **Imagem ${
 
   const submitAvaliacao = async (overrideData?: Partial<AvaliacaoData>) => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      
       // Usar dados fornecidos diretamente ou fallback para o estado
       const finalData = { ...avaliacaoData, ...overrideData }
       
@@ -663,10 +649,6 @@ ${desvioInfo.imagens.map((img: ImagemDesvio, index: number) => `📷 **Imagem ${
       
       const response = await fetch(`/api/desvios/${desvio?.id}/avaliar`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${auth_token}`,
-          'Content-Type': 'application/json'
-        },
         body: JSON.stringify(avaliacaoPayload)
       })
       

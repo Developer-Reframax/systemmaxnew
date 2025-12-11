@@ -1,32 +1,29 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import jwt from 'jsonwebtoken';
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { verifyToken } from '@/lib/auth'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+)
 
-// GET /api/almoxarifado/requisicoes/[id] - Buscar requisição específica
+const AUTH_ERROR = { error: 'Token de acesso requerido' }
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 });
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json(AUTH_ERROR, { status: 401 })
+    }
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
-    const token = authHeader.substring(7);
-    try {
-      jwt.verify(token, process.env.JWT_SECRET!);
-    } catch {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
-    }
-
-    const { id } = await params;
+    const { id } = await params
 
     const { data: requisicao, error } = await supabase
       .from('requisicoes')
@@ -45,85 +42,72 @@ export async function GET(
         )
       `)
       .eq('id', id)
-      .single();
+      .single()
 
     if (error) {
-      if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Requisição não encontrada' }, { status: 404 });
+      if ((error as { code?: string }).code === 'PGRST116') {
+        return NextResponse.json({ error: 'Requisicao nao encontrada' }, { status: 404 })
       }
-      console.error('Erro ao buscar requisição:', error);
-      return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+      console.error('Erro ao buscar requisicao:', error)
+      return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
       data: requisicao
-    });
-
+    })
   } catch (error) {
-    console.error('Erro na API de requisição:', error);
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+    console.error('Erro na API de requisicao:', error)
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
   }
 }
 
-// PUT /api/almoxarifado/requisicoes/[id] - Atualizar requisição (apenas pendentes)
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 });
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json(AUTH_ERROR, { status: 401 })
+    }
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
-    const token = authHeader.substring(7);
-    interface DecodedToken {
-      matricula: string;
-    }
-    let decoded: DecodedToken;
-    try {
-      decoded = jwt.verify(token, process.env.JWT_SECRET!) as DecodedToken;
-    } catch {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
-    }
+    const body = await request.json()
+    const { observacoes } = body
+    const { id } = await params
 
-    const body = await request.json();
-    const { observacoes } = body;
-
-    const { id } = await params;
-
-    // Verificar se a requisição existe e está pendente
     const { data: requisicaoExistente, error: fetchError } = await supabase
       .from('requisicoes')
       .select('id, status, matricula_solicitante')
       .eq('id', id)
-      .single();
+      .single()
 
     if (fetchError) {
-      if (fetchError.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Requisição não encontrada' }, { status: 404 });
+      if ((fetchError as { code?: string }).code === 'PGRST116') {
+        return NextResponse.json({ error: 'Requisicao nao encontrada' }, { status: 404 })
       }
-      console.error('Erro ao buscar requisição:', fetchError);
-      return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+      console.error('Erro ao buscar requisicao:', fetchError)
+      return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
     }
 
-    // Verificar se o usuário é o solicitante
-    if (requisicaoExistente.matricula_solicitante !== decoded.matricula) {
-      return NextResponse.json({ 
-        error: 'Você só pode editar suas próprias requisições' 
-      }, { status: 403 });
+    if (requisicaoExistente.matricula_solicitante !== user.matricula) {
+      return NextResponse.json(
+        { error: 'Você só pode editar suas próprias requisicoes' },
+        { status: 403 }
+      )
     }
 
-    // Verificar se a requisição ainda está pendente
     if (requisicaoExistente.status !== 'pendente') {
-      return NextResponse.json({ 
-        error: 'Apenas requisições pendentes podem ser editadas' 
-      }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Apenas requisicoes pendentes podem ser editadas' },
+        { status: 400 }
+      )
     }
 
-    // Atualizar requisição
     const { data: requisicaoAtualizada, error: updateError } = await supabase
       .from('requisicoes')
       .update({
@@ -142,20 +126,20 @@ export async function PUT(
           item:itens_almoxarifado(id, nome, categoria, imagem_url)
         )
       `)
-      .single();
+      .single()
 
     if (updateError) {
-      console.error('Erro ao atualizar requisição:', updateError);
-      return NextResponse.json({ error: 'Erro ao atualizar requisição' }, { status: 500 });
+      console.error('Erro ao atualizar requisicao:', updateError)
+      return NextResponse.json({ error: 'Erro ao atualizar requisicao' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
       data: requisicaoAtualizada
-    });
-
+    })
   } catch (error) {
-    console.error('Erro na API de atualização de requisição:', error);
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
+    console.error('Erro na API de atualizacao de requisicao:', error)
+    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
   }
 }
+
