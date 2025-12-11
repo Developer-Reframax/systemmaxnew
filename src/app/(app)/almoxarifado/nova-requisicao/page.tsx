@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { ShoppingCart, Plus, Minus, Trash2, Package, AlertCircle, CheckCircle } from 'lucide-react'
 import { toast } from 'sonner'
-import MainLayout from '@/components/Layout/MainLayout'
 
 interface CartItem {
   id: string
@@ -185,7 +184,7 @@ function NovaRequisicao() {
 
   if (cartItems.length === 0) {
     return (
-      <MainLayout>
+      
         <div className="container mx-auto px-4 py-8">
           <div className="max-w-2xl mx-auto text-center">
             <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
@@ -201,12 +200,12 @@ function NovaRequisicao() {
             </button>
           </div>
         </div>
-      </MainLayout>
+      
     )
   }
 
   return (
-    <MainLayout>
+    
       <div className="container mx-auto px-4 py-8">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
@@ -377,8 +376,9 @@ function NovaRequisicao() {
         </div>
       </div>
       </div>
-    </MainLayout>
+    
   )
 }
 
 export default NovaRequisicao
+

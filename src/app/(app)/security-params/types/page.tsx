@@ -4,7 +4,6 @@ import { useState, useEffect, useCallback } from 'react'
 import { toast } from 'sonner'
 import { Plus, Search, Edit, Trash2, Tag, ArrowLeft } from 'lucide-react'
 import { useRouter } from 'next/navigation'
-import MainLayout from '@/components/Layout/MainLayout'
 import { useAuth } from '@/hooks/useAuth'
 
 interface Type {
@@ -181,16 +180,16 @@ export default function TypesPage() {
 
   if (!user || user.role === 'Usuario') {
     return (
-      <MainLayout>
+      
         <div className="flex items-center justify-center h-64">
           <p className="text-gray-500">Acesso negado. Apenas administradores e editores podem gerenciar tipos.</p>
         </div>
-      </MainLayout>
+      
     )
   }
 
   return (
-    <MainLayout>
+    
       <div className="space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
@@ -370,6 +369,8 @@ export default function TypesPage() {
           </div>
         )}
       </div>
-    </MainLayout>
+    
   )
 }
+
+

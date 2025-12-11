@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation'
 import { CheckCircle, XCircle, Clock, Package, User, Calendar, Eye } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
-import MainLayout from '@/components/Layout/MainLayout'
 
 interface RequisitionItem {
   id: string
@@ -167,17 +166,17 @@ function Aprovacoes() {
 
   if (authLoading || loading) {
     return (
-      <MainLayout>
+      
         <div className="bg-white rounded-lg shadow-sm p-8 text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Carregando requisições...</p>
         </div>
-      </MainLayout>
+      
     )
   }
 
   return (
-    <MainLayout>
+    
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
@@ -459,8 +458,9 @@ function Aprovacoes() {
           </div>
         )}
       </div>
-    </MainLayout>
+    
   )
 }
 
 export default Aprovacoes
+
