@@ -10,16 +10,14 @@ const supabase = createClient(
 // GET - Buscar todos os módulos
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 })
+    // Verificar autenticação
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
     }
-
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    
-    if (!decoded) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     const { data: modules, error } = await supabase
@@ -42,20 +40,17 @@ export async function GET(request: NextRequest) {
 // POST - Criar novo módulo
 export async function POST(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 })
+    // Verificar autenticação
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
     }
-
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    
-    if (!decoded) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
-
     // Verificar se é admin
-    if (decoded.role !== 'Admin') {
+    if (user.role !== 'Admin') {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
     }
 
@@ -86,20 +81,18 @@ export async function POST(request: NextRequest) {
 // PUT - Atualizar módulo
 export async function PUT(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 })
+    // Verificar autenticação
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
     }
-
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    
-    if (!decoded) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     // Verificar se é admin
-    if (decoded.role !== 'Admin') {
+    if (user.role !== 'Admin') {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
     }
 
@@ -131,20 +124,18 @@ export async function PUT(request: NextRequest) {
 // DELETE - Deletar módulo
 export async function DELETE(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token não fornecido' }, { status: 401 })
+   // Verificar autenticação
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
     }
-
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    
-    if (!decoded) {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 })
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     // Verificar se é admin
-    if (decoded.role !== 'Admin') {
+    if (user.role !== 'Admin') {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
     }
 

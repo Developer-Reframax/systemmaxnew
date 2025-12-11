@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Supabase env vars not configured' }, { status: 500 })
   }
 
-  const token = request.nextUrl.searchParams.get('token')
+  const token = request.cookies.get('token')?.value
   if (!token) {
     return NextResponse.json({ error: 'Token is required' }, { status: 401 })
   }

@@ -35,11 +35,8 @@ export default function DocumentationExperience() {
   const loadPages = useCallback(async () => {
     try {
       setLoading(true)
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/documentation', {
-        headers: {
-          Authorization: token ? `Bearer ${token}` : ''
-        }
+        method: 'GET'
       })
 
       const data = await response.json()

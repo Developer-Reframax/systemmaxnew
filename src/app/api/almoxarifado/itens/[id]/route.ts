@@ -1,12 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
-import jwt from 'jsonwebtoken';
 import { v4 as uuidv4 } from 'uuid';
+import { verifyToken } from '@/lib/auth';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
+
+const AUTH_ERROR = {error: 'Token de acesso requerido'}
 
 // GET /api/almoxarifado/itens/[id] - Buscar item por ID
 export async function GET(
@@ -14,17 +16,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 });
+    // Verificar autenticação/
+    const token = request.cookies.get('auth_token')?.value
+    if (!token){
+      return NextResponse.json(AUTH_ERROR, { status: 401})
     }
-
-    const token = authHeader.substring(7);
-    try {
-      jwt.verify(token, process.env.JWT_SECRET!);
-    } catch {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+    const user = verifyToken (token)
+    if (!user){
+      return NextResponse.json ({error: 'Token invalido ou expirado'}, { status: 401 })
     }
 
     const { id } = await params;
@@ -56,17 +55,14 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 });
+  // Verificar autenticação/
+    const token = request.cookies.get('auth_token')?.value
+    if (!token){
+      return NextResponse.json(AUTH_ERROR, { status: 401})
     }
-
-    const token = authHeader.substring(7);
-    try {
-      jwt.verify(token, process.env.JWT_SECRET!);
-    } catch {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+    const user = verifyToken (token)
+    if (!user){
+      return NextResponse.json ({error: 'Token invalido ou expirado'}, { status: 401 })
     }
 
     // Usuário autenticado pode editar itens
@@ -195,17 +191,14 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 });
+  // Verificar autenticação/
+    const token = request.cookies.get('auth_token')?.value
+    if (!token){
+      return NextResponse.json(AUTH_ERROR, { status: 401})
     }
-
-    const token = authHeader.substring(7);
-    try {
-      jwt.verify(token, process.env.JWT_SECRET!);
-    } catch {
-      return NextResponse.json({ error: 'Token inválido' }, { status: 401 });
+    const user = verifyToken (token)
+    if (!user){
+      return NextResponse.json ({error: 'Token invalido ou expirado'}, { status: 401 })
     }
 
     // Usuário autenticado pode excluir itens

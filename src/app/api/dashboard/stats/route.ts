@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { verifyJWTToken } from '@/lib/jwt-middleware'
+import { verifyToken } from '@/lib/auth'
 
 type CountResult = { count: number | null; error: Error | null }
 
@@ -74,15 +74,24 @@ function mapSessionToActivity(session: SessionRow) {
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await verifyJWTToken(request)
-    if (!authResult.success || !authResult.user) {
+    // Autenticação leve: apenas garante que há cookie e que o JWT é válido/ativo.
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
       return NextResponse.json(
-        { success: false, message: authResult.error },
-        { status: authResult.status || 401 }
+        { success: false, message: 'Token de autenticacao nao encontrado' },
+        { status: 401 }
       )
     }
 
-    const contrato = authResult.user.contrato_raiz || null
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json(
+        { success: false, message: 'Token invalido ou expirado' },
+        { status: 401 }
+      )
+    }
+
+    const contrato = user.contrato_raiz || null
 
     // Contagens com filtro de contrato quando aplicável
     const [

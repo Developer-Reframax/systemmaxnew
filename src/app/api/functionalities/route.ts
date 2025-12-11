@@ -1,35 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
+function requireAuth(request: NextRequest) {
+  const token = request.cookies.get('auth_token')?.value
+  if (!token) {
+    return { user: null, response: NextResponse.json({ success: false, error: 'Token de acesso requerido' }, { status: 401 }) }
+  }
+
+  const user = verifyToken(token)
+  if (!user) {
+    return { user: null, response: NextResponse.json({ success: false, error: 'Token invalido ou expirado' }, { status: 401 }) }
+  }
+
+  return { user, response: null as NextResponse | null }
+}
 
 // GET - Buscar todas as funcionalidades de módulos exclusivos
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: 'Token de acesso requerido' },
-        { status: 401 }
-      )
-    }
+    // Autenticação via cookie: apenas verifica presença/validade básica do JWT
+    const { user, response } = requireAuth(request)
+    if (!user) return response!
 
-    const token = authHeader.substring(7)
-    let decoded: jwt.JwtPayload | string
-    
-    try {
-      decoded = jwt.verify(token, JWT_SECRET) as jwt.JwtPayload
-    } catch {
-      return NextResponse.json(
-        { success: false, error: 'Token inválido' },
-        { status: 401 }
-      )
-    }
-
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (decoded.role !== 'Admin' && decoded.role !== 'Editor') {
+    // Permissão: somente Admin ou Editor
+    if (user.role !== 'Admin' && user.role !== 'Editor') {
       return NextResponse.json(
         { success: false, error: 'Acesso negado. Apenas Admin e Editor podem gerenciar funcionalidades.' },
         { status: 403 }
@@ -51,9 +46,8 @@ export async function GET(request: NextRequest) {
       .order('nome')
 
     // Filtrar por tipo exclusivo
-    const exclusiveFunctionalities = functionalities?.filter(
-      (func: { modulos?: { tipo?: string } }) => func.modulos?.tipo === 'exclusivo'
-    ) || []
+    const exclusiveFunctionalities =
+      functionalities?.filter((func: { modulos?: { tipo?: string } }) => func.modulos?.tipo === 'exclusivo') || []
 
     if (error) {
       console.error('Supabase error:', error)
@@ -67,7 +61,6 @@ export async function GET(request: NextRequest) {
       success: true,
       functionalities: exclusiveFunctionalities
     })
-
   } catch (error) {
     console.error('Erro na API de funcionalidades:', error)
     return NextResponse.json(
@@ -76,3 +69,4 @@ export async function GET(request: NextRequest) {
     )
   }
 }
+

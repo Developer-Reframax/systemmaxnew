@@ -19,9 +19,10 @@ export async function POST(request: NextRequest) {
     const formData = await request.formData()
     const avatarFile = formData.get('avatar') as File
     const matricula = formData.get('matricula') as string
+    const matriculaUserLogado = user?.matricula as unknown
 
     // Users can only upload their own avatar or admins can upload for any user
-    if (!user || (user.matricula !== matricula && user.role !== 'Admin')) {
+    if (!user || (matriculaUserLogado !== matricula && user.role !== 'Admin')) {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
     }
 

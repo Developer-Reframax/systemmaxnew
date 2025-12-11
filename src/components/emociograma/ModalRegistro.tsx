@@ -44,7 +44,6 @@ export default function ModalRegistro({ isOpen, onClose, onSuccess }: ModalRegis
     setLoading(true)
 
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const requestData: RegistroEmociogramaRequest = {
         estado_emocional: selectedEmotion,
         observacoes: observacoes.trim() || undefined
@@ -52,10 +51,6 @@ export default function ModalRegistro({ isOpen, onClose, onSuccess }: ModalRegis
 
       const response = await fetch('/api/emociograma', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${auth_token}`
-        },
         body: JSON.stringify(requestData)
       })
 

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { verifyJWTToken } from '@/lib/jwt-middleware'
+import { verifyToken } from '@/lib/auth'
 
 const supabase = createClient(
   process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -34,21 +34,27 @@ const mapSession = (session: SessionRecord & { usuarios?: unknown[] }) => ({
   tempo_total_segundos: session.tempo_total_segundos ?? 0
 })
 
+function requireAuth(request: NextRequest) {
+  const token = request.cookies.get('auth_token')?.value
+  if (!token) {
+    return { user: null, response: NextResponse.json({ success: false, message: 'Token de autenticacao nao encontrado' }, { status: 401 }) }
+  }
+
+  const user = verifyToken(token)
+  if (!user) {
+    return { user: null, response: NextResponse.json({ success: false, message: 'Token invalido ou expirado' }, { status: 401 }) }
+  }
+
+  return { user, response: null as NextResponse | null }
+}
+
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await verifyJWTToken(request)
-    if (!authResult.success || !authResult.user) {
-      return NextResponse.json(
-        { success: false, message: authResult.error },
-        { status: authResult.status || 401 }
-      )
-    }
-
-    if (!['Admin', 'Editor'].includes(authResult.user.role)) {
-      return NextResponse.json(
-        { success: false, message: 'Acesso negado' },
-        { status: 403 }
-      )
+    // Autenticação: cookie precisa existir e JWT ser válido; check de role leve (Admin/Editor).
+    const { user, response } = requireAuth(request)
+    if (!user) return response!
+    if (!['Admin', 'Editor'].includes(user.role)) {
+      return NextResponse.json({ success: false, message: 'Acesso negado' }, { status: 403 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -58,7 +64,8 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('sessoes')
-      .select(`
+      .select(
+        `
         *,
         usuario:usuarios (
           matricula,
@@ -67,7 +74,8 @@ export async function GET(request: NextRequest) {
           role,
           funcao
         )
-      `)
+      `
+      )
       .order('inicio_sessao', { ascending: false })
       .limit(200)
 
@@ -78,8 +86,8 @@ export async function GET(request: NextRequest) {
     const { data, error } = await query
 
     if (error) {
-      console.error('Erro ao buscar sessões:', error)
-      return NextResponse.json({ success: false, message: 'Erro ao buscar sessões' }, { status: 500 })
+      console.error('Erro ao buscar sessoes:', error)
+      return NextResponse.json({ success: false, message: 'Erro ao buscar sessoes' }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -87,20 +95,15 @@ export async function GET(request: NextRequest) {
       sessions: (data || []).map(mapSession)
     })
   } catch (error) {
-    console.error('Erro na rota de sessões (GET):', error)
+    console.error('Erro na rota de sessoes (GET):', error)
     return NextResponse.json({ success: false, message: 'Erro interno do servidor' }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await verifyJWTToken(request)
-    if (!authResult.success || !authResult.user) {
-      return NextResponse.json(
-        { success: false, message: authResult.error },
-        { status: authResult.status || 401 }
-      )
-    }
+    const { user, response } = requireAuth(request)
+    if (!user) return response!
 
     const body = await request.json().catch(() => ({}))
     const startedAt = typeof body.started_at === 'string' ? body.started_at : new Date().toISOString()
@@ -118,7 +121,7 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabase
       .from('sessoes')
       .insert({
-        matricula_usuario: Number(authResult.user.matricula),
+        matricula_usuario: Number(user.matricula),
         inicio_sessao: startedAt,
         paginas_acessadas: 1,
         modulos_acessados: [initialEvent],
@@ -128,8 +131,8 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error || !data) {
-      console.error('Erro ao criar sessão:', error)
-      return NextResponse.json({ success: false, message: 'Erro ao criar sessão' }, { status: 500 })
+      console.error('Erro ao criar sessao:', error)
+      return NextResponse.json({ success: false, message: 'Erro ao criar sessao' }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -138,20 +141,15 @@ export async function POST(request: NextRequest) {
       session: mapSession(data as SessionRecord)
     })
   } catch (error) {
-    console.error('Erro na rota de sessões (POST):', error)
+    console.error('Erro na rota de sessoes (POST):', error)
     return NextResponse.json({ success: false, message: 'Erro interno do servidor' }, { status: 500 })
   }
 }
 
 export async function PATCH(request: NextRequest) {
   try {
-    const authResult = await verifyJWTToken(request)
-    if (!authResult.success || !authResult.user) {
-      return NextResponse.json(
-        { success: false, message: authResult.error },
-        { status: authResult.status || 401 }
-      )
-    }
+    const { user, response } = requireAuth(request)
+    if (!user) return response!
 
     const body = await request.json().catch(() => ({}))
     const sessionId = body.sessionId || body.session_id || body.id
@@ -160,7 +158,7 @@ export async function PATCH(request: NextRequest) {
 
     if (!sessionId) {
       return NextResponse.json(
-        { success: false, message: 'ID da sessão não informado' },
+        { success: false, message: 'ID da sessao nao informado' },
         { status: 400 }
       )
     }
@@ -173,14 +171,14 @@ export async function PATCH(request: NextRequest) {
 
     if (fetchError || !currentSession) {
       return NextResponse.json(
-        { success: false, message: 'Sessão não encontrada' },
+        { success: false, message: 'Sessao nao encontrada' },
         { status: 404 }
       )
     }
 
-    if (Number(currentSession.matricula_usuario) !== Number(authResult.user.matricula)) {
+    if (Number(currentSession.matricula_usuario) !== Number(user.matricula)) {
       return NextResponse.json(
-        { success: false, message: 'Sessão não pertence ao usuário autenticado' },
+        { success: false, message: 'Sessao nao pertence ao usuario autenticado' },
         { status: 403 }
       )
     }
@@ -198,18 +196,15 @@ export async function PATCH(request: NextRequest) {
 
     const updateData: Partial<SessionRecord> = {
       modulos_acessados: events,
-      paginas_acessadas: event?.type === 'page_view'
-        ? (session.paginas_acessadas || 0) + 1
-        : session.paginas_acessadas
+      paginas_acessadas:
+        event?.type === 'page_view' ? (session.paginas_acessadas || 0) + 1 : session.paginas_acessadas
     }
 
     if (endSession) {
       const endTime = event?.occurred_at || now
       const durationSeconds = Math.max(
         0,
-        Math.floor(
-          (new Date(endTime).getTime() - new Date(session.inicio_sessao).getTime()) / 1000
-        )
+        Math.floor((new Date(endTime).getTime() - new Date(session.inicio_sessao).getTime()) / 1000)
       )
 
       updateData.fim_sessao = endTime
@@ -224,8 +219,8 @@ export async function PATCH(request: NextRequest) {
       .single()
 
     if (error || !updated) {
-      console.error('Erro ao atualizar sessão:', error)
-      return NextResponse.json({ success: false, message: 'Erro ao atualizar sessão' }, { status: 500 })
+      console.error('Erro ao atualizar sessao:', error)
+      return NextResponse.json({ success: false, message: 'Erro ao atualizar sessao' }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -233,7 +228,8 @@ export async function PATCH(request: NextRequest) {
       session: mapSession(updated as SessionRecord)
     })
   } catch (error) {
-    console.error('Erro na rota de sessões (PATCH):', error)
+    console.error('Erro na rota de sessoes (PATCH):', error)
     return NextResponse.json({ success: false, message: 'Erro interno do servidor' }, { status: 500 })
   }
 }
+

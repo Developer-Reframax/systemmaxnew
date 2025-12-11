@@ -83,10 +83,9 @@ export async function POST(request: NextRequest) {
     console.log('JWT token generated successfully')
     console.log('Login successful for user:', user.email)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Login realizado com sucesso',
-      token,
       user: {
         matricula: user.matricula,
         nome: user.nome,
@@ -97,6 +96,16 @@ export async function POST(request: NextRequest) {
         tipo: user.tipo
       }
     })
+
+    response.cookies.set('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 8 // 8 horas
+    })
+
+    return response
 
   } catch (error) {
     console.error('=== LOGIN ERROR ===')

@@ -187,12 +187,7 @@ export default function PlanoAcaoModal({
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        toast.error('Token de autenticação não encontrado');
-        return;
-      }
-
+      
       if (!user?.matricula) {
         toast.error('Matrícula do usuário logado não encontrada');
         return;
@@ -218,10 +213,6 @@ export default function PlanoAcaoModal({
 
         const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify(createData)
         });
 
@@ -246,10 +237,6 @@ export default function PlanoAcaoModal({
 
         const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao/${planoId}`, {
           method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify(updateData)
         });
 
@@ -267,9 +254,6 @@ export default function PlanoAcaoModal({
 
           const uploadResponse = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao/${planoId}/evidencias`, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            },
             body: formDataUpload
           });
 
