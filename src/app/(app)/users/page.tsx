@@ -756,8 +756,8 @@ export default function UsersPage() {
       worksheet.columns = [
         { header: 'Nome', key: 'nome', width: 25 },
         { header: 'Email', key: 'email', width: 30 },
-        { header: 'Matrcula', key: 'matricula', width: 12 },
-        { header: 'Funo', key: 'funcao', width: 20 },
+        { header: 'Matrícula', key: 'matricula', width: 12 },
+        { header: 'Função', key: 'funcao', width: 20 },
         { header: 'Contrato Raiz', key: 'contrato_raiz', width: 15 },
         { header: 'Role', key: 'role', width: 10 },
         { header: 'Status', key: 'status', width: 10 }
@@ -845,7 +845,7 @@ export default function UsersPage() {
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
                 >
                   <Plus className="h-4 w-4" />
-                  Novo Usurio
+                  Novo Usuário
                 </button>
               </>
             )}
@@ -872,12 +872,12 @@ export default function UsersPage() {
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Nome</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Matrcula</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Funo</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Matrícula</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Função</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Contrato Raiz</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Role</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Aes</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">Ações</th>
                 </tr>
               </thead>
               <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
@@ -1137,7 +1137,7 @@ export default function UsersPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Matrcula *
+                      Matrícula *
                     </label>
                     <input
                       type="number"
@@ -1171,7 +1171,7 @@ export default function UsersPage() {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Funo
+                      Função
                     </label>
                     <input
                       type="text"
@@ -1445,13 +1445,13 @@ export default function UsersPage() {
                         {userToDelete.nome}
                       </div>
                       <div className="text-gray-500 dark:text-gray-400">
-                        Matrcula: {userToDelete.matricula}
+                        Matrícula: {userToDelete.matricula}
                       </div>
                       <div className="text-gray-500 dark:text-gray-400">
                         Email: {userToDelete.email}
                       </div>
                       <div className="text-gray-500 dark:text-gray-400">
-                        Funo: {userToDelete.funcao}
+                        Função: {userToDelete.funcao}
                       </div>
                     </div>
                   </div>

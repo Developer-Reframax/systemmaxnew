@@ -68,11 +68,6 @@ export default function ContractsPage() {
 
   const fetchUsers = async () => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) {
-        console.error('Token de autenticação não encontrado')
-        return
-      }
 
       const response = await fetch('/api/users', {
         method: 'GET'
