@@ -311,7 +311,7 @@ export async function PUT(request: NextRequest) {
       .eq('id', id)
       .select(`
         *,
-        natureza:natureza_id(id, naturez),
+        natureza:natureza_id(id, natureza),
         tipo:tipo_id(id, tipo),
         risco_associado:riscoassociado_id(id, risco_associado)
       `)
