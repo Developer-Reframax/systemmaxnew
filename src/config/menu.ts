@@ -20,6 +20,7 @@ export type MenuIcon =
   | 'userPlus'
   | 'messageSquare'
   | 'heart'
+  | 'bot'
 
 
 export type MenuItem = {
@@ -47,6 +48,7 @@ export const menuItems: MenuItem[] = [
   { name: 'Gestao de emociograma', href: '/emociograma', icon: 'heart', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'emociograma' },
   { name: 'Prontidao Cognitiva', href: '/prontidao', icon: 'brain', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'teste_prontidao' },
   { name: 'OAC', href: '/oac', icon: 'clipboardCheck', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'oac' },
+   { name: 'Agentes de IA', href: '/agentes', icon: 'bot', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'agentes' },
   { name: 'Parametrizacao de Seguranca', href: '/security-params', icon: 'shield', roles: ['Admin', 'Editor'], moduleSlug: 'parametrizacao_seguranca' },
   { name: 'Sessoes', href: '/sessions', icon: 'activity', roles: ['Admin'], moduleSlug: 'monitoramento_seguranca' },
   { name: 'Documentacao', href: '/documentation', icon: 'book', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'documentacao' },

@@ -30,7 +30,8 @@ import {
   UserCheck,
   UserPlus,
   Users,
-  Heart
+  Heart,
+  Bot
 } from 'lucide-react'
 import Link from 'next/link'
 import { useRouter, usePathname } from 'next/navigation'
@@ -63,6 +64,7 @@ const iconMap: Record<MenuIcon, React.ComponentType<{ className?: string }>> = {
   userPlus: UserPlus,
   messageSquare: MessageSquare,
   heart: Heart,
+  bot: Bot,
 }
 
 export default function MainLayout({ children, allowedMenuItems }: MainLayoutProps) {
