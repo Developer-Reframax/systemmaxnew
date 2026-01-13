@@ -16,7 +16,10 @@ const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
   title: 'Sistema de Gestão de SeguranÇõÇœa do Trabalho',
-  description: 'Sistema completo para gestão de segurança do trabalho'
+  description: '',
+  icons: {
+    icon: '/favicon.png'
+  }
 }
 
 export default async function RootLayout({
@@ -53,3 +56,4 @@ export default async function RootLayout({
     </html>
   )
 }
+
