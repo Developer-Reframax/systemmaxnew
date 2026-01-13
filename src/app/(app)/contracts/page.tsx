@@ -89,9 +89,7 @@ export default function ContractsPage() {
 
   const fetchModules = async () => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) return
-
+      
       const response = await fetch('/api/modules', {
        method: 'GET'
       })
@@ -107,8 +105,6 @@ export default function ContractsPage() {
 
   const fetchContractModules = async (codigo: string) => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) return
 
       const response = await fetch(`/api/module-contracts?codigo_contrato=${codigo}`, {
        method: 'GET'
@@ -139,11 +135,7 @@ export default function ContractsPage() {
     if (!selectedContract) return
     const codigo_contrato = selectedContract.codigo
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) {
-        toast.error('Token de autenticação não encontrado')
-        return
-      }
+      
 
       const hasAccess = isContractHasModule(moduloId)
       const response = await fetch('/api/module-contracts', {
@@ -169,11 +161,7 @@ export default function ContractsPage() {
     setLoading(true)
 
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) {
-        toast.error('Token de autenticação não encontrado')
-        return
-      }
+      
 
       const contractData = {
         codigo: formData.codigo,

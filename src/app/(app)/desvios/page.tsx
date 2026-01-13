@@ -16,10 +16,12 @@ import {
   PieChart,
   Plus,
   Filter,
-  Download
+  Download,
+  UserCheck
 } from 'lucide-react'
 import FormularioConversacional from '@/components/desvios/FormularioConversacional'
 import { toast } from 'sonner'
+import * as ExcelJS from 'exceljs'
 
 interface DesviosStats {
   total: number
@@ -39,6 +41,35 @@ interface ProximoVencimento {
   natureza: { natureza: string }
 }
 
+type ExportColumn = {
+  id: string
+  label: string
+  width: number
+  type?: 'date' | 'bool'
+}
+
+const EXPORT_COLUMNS: ExportColumn[] = [
+  { id: 'matricula', label: 'Matricula', width: 12 },
+  { id: 'nome', label: 'Nome', width: 26 },
+  { id: 'natureza', label: 'Natureza', width: 18 },
+  { id: 'contrato', label: 'Contrato', width: 14 },
+  { id: 'local', label: 'Local', width: 18 },
+  { id: 'risco_associado', label: 'Risco associado', width: 20 },
+  { id: 'tipo', label: 'Tipo', width: 18 },
+  { id: 'equipe', label: 'Equipe', width: 18 },
+  { id: 'potencial', label: 'Potencial', width: 14 },
+  { id: 'acao', label: 'Acao', width: 28 },
+  { id: 'observacao', label: 'Observacao', width: 28 },
+  { id: 'data_conclusao', label: 'Data conclusao', width: 16, type: 'date' },
+  { id: 'ver_agir', label: 'Ver agir', width: 10, type: 'bool' },
+  { id: 'data_limite', label: 'Data limite', width: 16, type: 'date' },
+  { id: 'status', label: 'Status', width: 16 },
+  { id: 'potencial_local', label: 'Potencial local', width: 16 },
+  { id: 'acao_cliente', label: 'Acao cliente', width: 12, type: 'bool' },
+  { id: 'gerou_recusa', label: 'Gerou recusa', width: 12, type: 'bool' },
+  { id: 'data', label: 'Data', width: 14, type: 'date' }
+]
+
 export default function DesviosDashboard() {
   const { user, hasRole } = useAuth()
   const [stats, setStats] = useState<DesviosStats>({
@@ -56,6 +87,13 @@ export default function DesviosDashboard() {
   const [periodo, setPeriodo] = useState('30')
   const [tipoVisao, setTipoVisao] = useState<'geral' | 'meus'>('geral')
   const [showNewDesvioModal, setShowNewDesvioModal] = useState(false)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportMonth, setExportMonth] = useState('')
+  const [exportYear, setExportYear] = useState('')
+  const [exportStatus, setExportStatus] = useState('')
+  const [selectedColumns, setSelectedColumns] = useState<string[]>(
+    EXPORT_COLUMNS.map((column) => column.id)
+  )
 
   const loadDashboardData = useCallback(async () => {
     try {
@@ -94,6 +132,101 @@ export default function DesviosDashboard() {
   useEffect(() => {
     loadDashboardData()
   }, [loadDashboardData])
+
+  const exportToExcel = async () => {
+    try {
+      if (selectedColumns.length === 0) {
+        toast.error('Selecione pelo menos uma coluna')
+        return
+      }
+
+      const params = new URLSearchParams()
+      if (exportMonth || exportYear) {
+        const fallbackYear = exportYear || `${new Date().getFullYear()}`
+        if (exportMonth) params.set('month', exportMonth)
+        if (fallbackYear) params.set('year', fallbackYear)
+      }
+      if (exportStatus) params.set('status', exportStatus)
+
+      const response = await fetch(`/api/desvios/export?${params}`, { method: 'GET' })
+      if (!response.ok) {
+        throw new Error('Erro ao exportar')
+      }
+
+      const data = await response.json()
+      if (!data.success) {
+        throw new Error(data.message || 'Erro ao exportar')
+      }
+
+      const desvios = data.data || []
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Desvios')
+
+      const columns = EXPORT_COLUMNS.filter((column) => selectedColumns.includes(column.id))
+      worksheet.columns = columns.map((column) => ({
+        header: column.label,
+        key: column.id,
+        width: column.width
+      }))
+
+      const formatValue = (value: unknown, type?: 'date' | 'bool') => {
+        if (type === 'bool') {
+          return value ? 'Sim' : 'Nao'
+        }
+        if (type === 'date') {
+          if (!value) return '-'
+          const date = new Date(String(value))
+          if (Number.isNaN(date.getTime())) return '-'
+          return date.toLocaleDateString('pt-BR')
+        }
+        if (value === null || value === undefined || value === '') return '-'
+        return value
+      }
+
+      desvios.forEach((item: Record<string, unknown>) => {
+        const row: Record<string, unknown> = {}
+        columns.forEach((column) => {
+          row[column.id] = formatValue(item[column.id], column.type)
+        })
+        worksheet.addRow(row)
+      })
+
+      worksheet.getRow(1).font = { bold: true }
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE6F3FF' }
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `desvios-${new Date().toISOString().split('T')[0]}.xlsx`
+      link.click()
+      window.URL.revokeObjectURL(url)
+      setShowExportModal(false)
+    } catch (error) {
+      console.error('Erro ao exportar:', error)
+      toast.error('Erro ao exportar')
+    }
+  }
+
+  const resetExportFilters = () => {
+    setExportMonth('')
+    setExportYear('')
+    setExportStatus('')
+    setSelectedColumns(EXPORT_COLUMNS.map((column) => column.id))
+  }
+
+  const toggleColumn = (columnId: string) => {
+    setSelectedColumns((prev) =>
+      prev.includes(columnId) ? prev.filter((id) => id !== columnId) : [...prev, columnId]
+    )
+  }
 
   const formatTime = (timestamp: string) => {
     const date = new Date(timestamp)
@@ -184,7 +317,10 @@ export default function DesviosDashboard() {
             <option value="meus">Meus Desvios</option>
           </select>
 
-          <button className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors flex items-center">
+          <button
+            onClick={() => setShowExportModal(true)}
+            className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors flex items-center"
+          >
             <Download className="h-4 w-4 mr-1" />
             Exportar
           </button>
@@ -391,6 +527,16 @@ export default function DesviosDashboard() {
           </Link>
 
           <Link
+            href="/desvios/colaboradores"
+            className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+          >
+            <UserCheck className="h-6 w-6 text-emerald-600 mr-3" />
+            <span className="text-sm font-medium text-gray-900 dark:text-white">
+              Registros por colaborador
+            </span>
+          </Link>
+
+          <Link
             href="/desvios/kanban"
             className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
           >
@@ -416,6 +562,128 @@ export default function DesviosDashboard() {
         onClose={() => setShowNewDesvioModal(false)}
         onSuccess={loadDashboardData}
       />
+
+      {showExportModal ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40"
+            onClick={() => setShowExportModal(false)}
+          />
+          <div className="relative bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-lg">
+            <div className="p-5 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Exportar desvios
+              </h3>
+              <p className="text-sm text-gray-500 dark:text-gray-300 mt-1">
+                Filtros e colunas opcionais para a exportacao.
+              </p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Mes
+                  </label>
+                  <select
+                    value={exportMonth}
+                    onChange={(e) => setExportMonth(e.target.value)}
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  >
+                    <option value="">Todos</option>
+                    {Array.from({ length: 12 }, (_, idx) => (
+                      <option key={idx + 1} value={idx + 1}>
+                        {idx + 1}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ano
+                  </label>
+                  <input
+                    type="number"
+                    value={exportYear}
+                    onChange={(e) => setExportYear(e.target.value)}
+                    placeholder="Ex: 2026"
+                    className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status
+                </label>
+                <select
+                  value={exportStatus}
+                  onChange={(e) => setExportStatus(e.target.value)}
+                  className="w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  <option value="">Todos</option>
+                  <option value="Aguardando Avaliacao">Aguardando Avaliacao</option>
+                  <option value="Em Andamento">Em Andamento</option>
+                  <option value="Concluido">Concluido</option>
+                  <option value="Vencido">Vencido</option>
+                </select>
+              </div>
+
+              <div className="pt-2">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium text-gray-700">Colunas</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setSelectedColumns(EXPORT_COLUMNS.map((column) => column.id))}
+                      className="text-xs text-blue-600 hover:text-blue-700"
+                    >
+                      Selecionar tudo
+                    </button>
+                    <button
+                      onClick={() => setSelectedColumns([])}
+                      className="text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      Limpar
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {EXPORT_COLUMNS.map((column) => (
+                    <label key={column.id} className="flex items-center gap-2 text-sm text-gray-700">
+                      <input
+                        type="checkbox"
+                        checked={selectedColumns.includes(column.id)}
+                        onChange={() => toggleColumn(column.id)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      {column.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </div>
+            <div className="p-5 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2 justify-end">
+              <button
+                onClick={resetExportFilters}
+                className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Limpar filtros
+              </button>
+              <button
+                onClick={() => setShowExportModal(false)}
+                className="px-4 py-2 text-sm rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={exportToExcel}
+                className="px-4 py-2 text-sm rounded-md bg-blue-600 text-white hover:bg-blue-700"
+              >
+                Exportar
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   )
 }

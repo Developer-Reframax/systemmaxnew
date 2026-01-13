@@ -131,7 +131,7 @@ function FormulariosPage() {
   };
 
   const canManage = () => {
-    return user && ['Admin', 'Editor'].includes(user.role);
+    return user && ['Admin', 'Editor', 'Usuario'].includes(user.role);
   };
 
   const clearFilters = () => {
