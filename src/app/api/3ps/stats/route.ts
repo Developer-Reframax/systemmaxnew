@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 interface Participante3P {
@@ -75,6 +75,13 @@ export async function GET(request: NextRequest) {
       return acc
     }, {}) || {}
 
+    // Registros 3P's por tipo
+    const registros3psPorTipo = registros3ps?.reduce((acc: Record<string, number>, registro) => {
+      const tipo = registro.tipo || 'Nao informado'
+      acc[tipo] = (acc[tipo] || 0) + 1
+      return acc
+    }, {}) || {}
+
     // Registros 3P's por dia (últimos dias do período)
     const registros3psPorDia = []
     for (let i = parseInt(periodo) - 1; i >= 0; i--) {
@@ -147,6 +154,7 @@ export async function GET(request: NextRequest) {
           mediaParticipantes
         },
         registros3psPorArea,
+        registros3psPorTipo,
         registros3psPorDia,
         etapasAnalise,
         topUsuarios,

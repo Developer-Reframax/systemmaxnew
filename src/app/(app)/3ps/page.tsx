@@ -1,10 +1,10 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Users, Clock, CheckCircle, Plus, List, Shield, AlertCircle, Target } from 'lucide-react'
+import { Users, Clock, CheckCircle, Plus, List, Target, UserCheck } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, Legend } from 'recharts'
 
 interface Stats3P {
   resumo: {
@@ -16,15 +16,8 @@ interface Stats3P {
     mediaParticipantes: number
   }
   registros3psPorArea: Record<string, number>
+  registros3psPorTipo: Record<string, number>
   registros3psPorDia: Array<{ data: string; count: number }>
-  etapasAnalise: {
-    paralisacaoRealizada: number
-    riscosAvaliados: number
-    ambienteAvaliado: number
-    passoDescrito: number
-    hipotesesLevantadas: number
-    atividadeSegura: number
-  }
   topUsuarios: Array<{ usuario: string; count: number }>
   periodo: number
 }
@@ -69,22 +62,22 @@ export default function Dashboard3Ps() {
     return date.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
   }
 
+  const prepararDadosTipos = (dados: Record<string, number>) => {
+    return [
+      { nome: 'Aprendizado', valor: dados.Aprendizado || 0 },
+      { nome: 'Melhoria', valor: dados.Melhoria || 0 }
+    ]
+  }
+
+  const dadosTipos = prepararDadosTipos(stats?.registros3psPorTipo || {})
+  const totalTipos = dadosTipos.reduce((acc, item) => acc + item.valor, 0)
+  const coresTipos = ['#3B82F6', '#10B981']
+
   const prepararDadosGrafico = (dados: Record<string, number>) => {
     return Object.entries(dados).map(([nome, valor]) => ({
       nome,
       valor
     }))
-  }
-
-  const prepararDadosEtapas = (etapas: Stats3P['etapasAnalise']) => {
-    return [
-      { etapa: 'Paralisação', valor: etapas.paralisacaoRealizada },
-      { etapa: 'Riscos', valor: etapas.riscosAvaliados },
-      { etapa: 'Ambiente', valor: etapas.ambienteAvaliado },
-      { etapa: 'Passo a Passo', valor: etapas.passoDescrito },
-      { etapa: 'Hipóteses', valor: etapas.hipotesesLevantadas },
-      { etapa: 'Atividade Segura', valor: etapas.atividadeSegura }
-    ]
   }
 
   if (loading) {
@@ -132,88 +125,91 @@ export default function Dashboard3Ps() {
               <Plus className="w-4 h-4 mr-2" />
               Novo 3P
             </Link>
-            <Link
-              href="/3ps/meus-registros"
-              className="inline-flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors w-full sm:w-auto justify-center text-center"
-            >
-              <List className="w-4 h-4 mr-2" />
-              Meus Registros
-            </Link>
           </div>
         </div>
 
-        {/* Cards de Estatísticas */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-6 mb-8">
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Total de 3P's</p>
-                <p className="text-3xl font-bold text-blue-600">{stats?.resumo.total3ps || 0}</p>
+        {/* Cards de Estatisticas */}
+        <div className="space-y-6 mb-8">
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total de 3P's</p>
+                  <p className="text-3xl font-bold text-blue-600">{stats?.resumo.total3ps || 0}</p>
+                </div>
+                <div className="p-3 bg-blue-100 rounded-full">
+                  <Target className="w-6 h-6 text-blue-600" />
+                </div>
               </div>
-              <div className="p-3 bg-blue-100 rounded-full">
-                <Target className="w-6 h-6 text-blue-600" />
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Hoje</p>
+                  <p className="text-3xl font-bold text-green-600">{stats?.resumo.registros3psHoje || 0}</p>
+                </div>
+                <div className="p-3 bg-green-100 rounded-full">
+                  <Clock className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Taxa de Aprovacao</p>
+                  <p className="text-3xl font-bold text-green-600">{stats?.resumo.taxaAprovacao || 0}%</p>
+                </div>
+                <div className="p-3 bg-green-100 rounded-full">
+                  <CheckCircle className="w-6 h-6 text-green-600" />
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Media Participantes</p>
+                  <p className="text-3xl font-bold text-indigo-600">{stats?.resumo.mediaParticipantes || 0}</p>
+                </div>
+                <div className="p-3 bg-indigo-100 rounded-full">
+                  <Users className="w-6 h-6 text-indigo-600" />
+                </div>
               </div>
             </div>
           </div>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Hoje</p>
-                <p className="text-3xl font-bold text-green-600">{stats?.resumo.registros3psHoje || 0}</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <Link
+              href="/3ps/meus-registros"
+              className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Meus Registros</p>
+                  <p className="text-lg font-semibold text-gray-900">Ver minhas participacoes</p>
+                </div>
+                <div className="p-3 bg-gray-100 rounded-full">
+                  <List className="w-6 h-6 text-gray-700" />
+                </div>
               </div>
-              <div className="p-3 bg-green-100 rounded-full">
-                <Clock className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </div>
+            </Link>
 
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Taxa de Aprovação</p>
-                <p className="text-3xl font-bold text-green-600">{stats?.resumo.taxaAprovacao || 0}%</p>
+            <Link
+              href="/3ps/colaboradores"
+              className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Colaboradores</p>
+                  <p className="text-lg font-semibold text-gray-900">Relatorio por pessoa</p>
+                </div>
+                <div className="p-3 bg-blue-100 rounded-full">
+                  <UserCheck className="w-6 h-6 text-blue-600" />
+                </div>
               </div>
-              <div className="p-3 bg-green-100 rounded-full">
-                <CheckCircle className="w-6 h-6 text-green-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Áreas Ativas</p>
-                <p className="text-3xl font-bold text-purple-600">{stats?.resumo.areasAtivas || 0}</p>
-              </div>
-              <div className="p-3 bg-purple-100 rounded-full">
-                <Shield className="w-6 h-6 text-purple-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Com Oportunidades</p>
-                <p className="text-3xl font-bold text-orange-600">{stats?.resumo.registrosComOportunidades || 0}</p>
-              </div>
-              <div className="p-3 bg-orange-100 rounded-full">
-                <AlertCircle className="w-6 h-6 text-orange-600" />
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-600">Média Participantes</p>
-                <p className="text-3xl font-bold text-indigo-600">{stats?.resumo.mediaParticipantes || 0}</p>
-              </div>
-              <div className="p-3 bg-indigo-100 rounded-full">
-                <Users className="w-6 h-6 text-indigo-600" />
-              </div>
-            </div>
+            </Link>
           </div>
         </div>
 
@@ -239,24 +235,33 @@ export default function Dashboard3Ps() {
             </ResponsiveContainer>
           </div>
 
-          {/* Análise das Etapas */}
+          {/* Registros por Tipo */}
           <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Análise das Etapas</h3>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={prepararDadosEtapas(stats?.etapasAnalise || {} as Stats3P['etapasAnalise'])}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="etapa" 
-                  angle={-45}
-                  textAnchor="end"
-                  height={80}
-                  fontSize={12}
-                />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="valor" fill="#10B981" />
-              </BarChart>
-            </ResponsiveContainer>
+            <h3 className="text-lg font-semibold text-gray-900 mb-4">Registros por Tipo</h3>
+            {totalTipos > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={dadosTipos}
+                    dataKey="valor"
+                    nameKey="nome"
+                    innerRadius={70}
+                    outerRadius={110}
+                    paddingAngle={2}
+                  >
+                    {dadosTipos.map((_entry, index) => (
+                      <Cell key={`cell-${index}`} fill={coresTipos[index % coresTipos.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex items-center justify-center h-[300px] text-gray-500">
+                Nenhum dado disponivel
+              </div>
+            )}
           </div>
         </div>
 

@@ -121,7 +121,7 @@ export async function POST(request: NextRequest) {
     // Validar campos obrigatórios
     const camposObrigatorios = [
       'area_id', 'atividade', 'paralisacao_realizada', 'riscos_avaliados',
-      'ambiente_avaliado', 'passo_descrito', 'hipoteses_levantadas', 'atividade_segura'
+      'ambiente_avaliado', 'passo_descrito', 'hipoteses_levantadas', 'atividade_segura', 'tipo'
     ]
 
     for (const campo of camposObrigatorios) {
@@ -144,6 +144,13 @@ export async function POST(request: NextRequest) {
           error: `Campo ${campo} deve ser verdadeiro ou falso` 
         }, { status: 400 })
       }
+    }
+
+    const tiposValidos = ['Melhoria', 'Aprendizado']
+    if (!tiposValidos.includes(registro3pData.tipo)) {
+      return NextResponse.json({ 
+        error: 'Campo tipo deve ser Melhoria ou Aprendizado' 
+      }, { status: 400 })
     }
 
     // Validar que participantes é um array
