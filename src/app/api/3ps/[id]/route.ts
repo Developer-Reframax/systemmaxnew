@@ -76,13 +76,6 @@ export async function PUT(
       return NextResponse.json({ error: 'ID do registro não fornecido' }, { status: 400 })
     }
 
-    const tiposValidos = ['Melhoria', 'Aprendizado']
-    if (updateData.tipo !== undefined && !tiposValidos.includes(updateData.tipo)) {
-      return NextResponse.json({ 
-        error: 'Campo tipo deve ser Melhoria ou Aprendizado' 
-      }, { status: 400 })
-    }
-
     // Verificar se o registro existe e se o usuário tem permissão para editá-lo
     const { data: registroExistente, error: errorVerificacao } = await supabase
       .from('registros_3ps')
@@ -200,13 +193,6 @@ export async function DELETE(
 
     if (!id) {
       return NextResponse.json({ error: 'ID do registro não fornecido' }, { status: 400 })
-    }
-
-    const tiposValidos = ['Melhoria', 'Aprendizado']
-    if (updateData.tipo !== undefined -and -not ( -contains updateData.tipo)) {
-      return NextResponse.json({ 
-        error: 'Campo tipo deve ser Melhoria ou Aprendizado' 
-      }, { status: 400 })
     }
 
     // Verificar se o registro existe e se o usuário tem permissão para excluí-lo
