@@ -1,16 +1,18 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { ArrowLeft, Save, FileText, Search, X, ChevronDown, ChevronRight, Target, CheckCircle, AlertCircle, Play } from 'lucide-react'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/hooks/useAuth'
 
 interface Usuario {
   matricula: number
   nome: string
   funcao?: string
   email?: string
+  contrato_raiz?: string
 }
 
 interface Local {
@@ -29,6 +31,7 @@ interface Registro3PFormData {
   hipoteses_levantadas: boolean | null
   atividade_segura: boolean | null
   oportunidades: string
+  tipo: '' | 'Melhoria' | 'Aprendizado'
   participantes: number[]
 }
 
@@ -258,6 +261,7 @@ function MultiSelect({ options, selectedValues, onChange, placeholder, error }: 
 }
 
 export default function Novo3P() {
+  const { user } = useAuth()
   const router = useRouter()
   const [currentStep, setCurrentStep] = useState(1)
   const [loading, setLoading] = useState(false)
@@ -275,25 +279,28 @@ export default function Novo3P() {
     hipoteses_levantadas: null,
     atividade_segura: null,
     oportunidades: '',
+    tipo: '',
     participantes: []
   })
 
-  // Carregar dados iniciais
-  useEffect(() => {
-    loadInitialData()
-  }, [])
-
-  const loadInitialData = async () => {
+  const loadInitialData = useCallback(async () => {
     try {
 
-      // Carregar locais
-      const locaisResponse = await fetch('/api/security-params/locations', {
-       method: 'GET'
-      })
+      // Carregar locais filtrados pelo contrato do usuario
+      const contrato = user?.contrato_raiz
+      if (contrato) {
+        const locaisResponse = await fetch(`/api/security-params/locations?contrato=${encodeURIComponent(contrato)}&limit=500`, {
+          method: 'GET'
+        })
 
-      if (locaisResponse.ok) {
-        const locaisData = await locaisResponse.json()
-        setLocais(locaisData.data || [])
+        if (locaisResponse.ok) {
+          const locaisData = await locaisResponse.json()
+          setLocais(locaisData.data || [])
+        } else {
+          setLocais([])
+        }
+      } else {
+        setLocais([])
       }
 
       // Carregar usuários
@@ -303,13 +310,23 @@ export default function Novo3P() {
 
       if (usuariosResponse.ok) {
         const usuariosData = await usuariosResponse.json()
-        setUsuarios(usuariosData.users || [])
+        const usuariosLista = usuariosData.users || []
+        const contrato = user?.contrato_raiz
+        const filtrados = contrato
+          ? usuariosLista.filter((usuario: Usuario) => usuario.contrato_raiz === contrato)
+          : []
+        setUsuarios(filtrados)
       }
     } catch (error) {
       console.error('Erro ao carregar dados iniciais:', error)
       toast.error('Erro ao carregar dados iniciais')
     }
-  }
+  }, [user?.contrato_raiz])
+
+  // Carregar dados iniciais
+  useEffect(() => {
+    loadInitialData()
+  }, [loadInitialData])
 
   const validateStep = (step: number): boolean => {
     const newErrors: Record<string, string> = {}
@@ -329,6 +346,10 @@ export default function Novo3P() {
       if (formData.passo_descrito === null) newErrors.passo_descrito = 'Campo obrigatório'
       if (formData.hipoteses_levantadas === null) newErrors.hipoteses_levantadas = 'Campo obrigatório'
       if (formData.atividade_segura === null) newErrors.atividade_segura = 'Campo obrigatório'
+    }
+
+    if (step === 4) {
+      if (!formData.tipo) newErrors.tipo = 'Campo obrigatÇürio'
     }
 
     setErrors(newErrors)
@@ -735,6 +756,37 @@ export default function Novo3P() {
                     rows={4}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-3">
+                    Tipo da descricao <span className="text-red-500">*</span>
+                  </label>
+                  <div className="space-y-2">
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="tipo"
+                        checked={formData.tipo === 'Aprendizado'}
+                        onChange={() => setFormData({ ...formData, tipo: 'Aprendizado' })}
+                        className="mr-2"
+                      />
+                      <span>Aprendizado</span>
+                    </label>
+                    <label className="flex items-center">
+                      <input
+                        type="radio"
+                        name="tipo"
+                        checked={formData.tipo === 'Melhoria'}
+                        onChange={() => setFormData({ ...formData, tipo: 'Melhoria' })}
+                        className="mr-2"
+                      />
+                      <span>Melhoria</span>
+                    </label>
+                  </div>
+                  {errors.tipo && (
+                    <p className="mt-1 text-sm text-red-600">{errors.tipo}</p>
+                  )}
                 </div>
 
                 <div>

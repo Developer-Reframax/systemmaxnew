@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server'
+﻿import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWTToken } from '@/lib/jwt-middleware'
 import { createClient } from '@supabase/supabase-js'
 
@@ -74,6 +74,13 @@ export async function PUT(
 
     if (!id) {
       return NextResponse.json({ error: 'ID do registro não fornecido' }, { status: 400 })
+    }
+
+    const tiposValidos = ['Melhoria', 'Aprendizado']
+    if (updateData.tipo !== undefined && !tiposValidos.includes(updateData.tipo)) {
+      return NextResponse.json({ 
+        error: 'Campo tipo deve ser Melhoria ou Aprendizado' 
+      }, { status: 400 })
     }
 
     // Verificar se o registro existe e se o usuário tem permissão para editá-lo
@@ -193,6 +200,13 @@ export async function DELETE(
 
     if (!id) {
       return NextResponse.json({ error: 'ID do registro não fornecido' }, { status: 400 })
+    }
+
+    const tiposValidos = ['Melhoria', 'Aprendizado']
+    if (updateData.tipo !== undefined -and -not ( -contains updateData.tipo)) {
+      return NextResponse.json({ 
+        error: 'Campo tipo deve ser Melhoria ou Aprendizado' 
+      }, { status: 400 })
     }
 
     // Verificar se o registro existe e se o usuário tem permissão para excluí-lo

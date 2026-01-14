@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -56,6 +56,7 @@ function Entregas() {
   const [showModal, setShowModal] = useState(false)
   const [processing, setProcessing] = useState(false)
   const [filter, setFilter] = useState<'pendente' | 'aprovada' | 'entregue' | 'todas'>('aprovada')
+  const [searchName, setSearchName] = useState('')
   
   // Estados para controle da entrega
   const [deliveryQuantities, setDeliveryQuantities] = useState<Record<string, number>>({})
@@ -204,6 +205,10 @@ function Entregas() {
       return req.status === 'entregue' || req.status === 'parcialmente_entregue'
     }
     return req.status === filter
+  }).filter(req => {
+    const termo = searchName.trim().toLowerCase()
+    if (!termo) return true
+    return req.solicitante.nome.toLowerCase().includes(termo)
   })
 
   if (loading || authLoading) {
@@ -233,7 +238,7 @@ function Entregas() {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Controle de Entregas</h1>
                 <p className="text-gray-600">
-                  {requisitions.filter(r => r.status === 'aprovada').length} requisições aguardando entrega
+                  {requisitions.filter(r => r.status === 'aprovada').length} requisiÇõÇæes aguardando entrega
                 </p>
               </div>
             </div>
@@ -242,27 +247,42 @@ function Entregas() {
 
         {/* Filtros */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-medium text-gray-700">Filtrar por status:</span>
-            <div className="flex space-x-2">
-              {[
-                { key: 'pendente', label: 'Aguardando Aprovação' },
-                { key: 'aprovada', label: 'Aguardando Entrega' },
-                { key: 'entregue', label: 'Entregues' },
-                { key: 'todas', label: 'Todas' }
-              ].map(option => (
-                <button
-                  key={option.key}
-                  onClick={() => setFilter(option.key as 'pendente' | 'aprovada' | 'entregue' | 'todas')}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                    filter === option.key
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                  }`}
-                >
-                  {option.label}
-                </button>
-              ))}
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-4">
+              <span className="text-sm font-medium text-gray-700">Filtrar por status:</span>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  { key: 'pendente', label: 'Aguardando AprovaÇõÇœo' },
+                  { key: 'aprovada', label: 'Aguardando Entrega' },
+                  { key: 'entregue', label: 'Entregues' },
+                  { key: 'todas', label: 'Todas' }
+                ].map(option => (
+                  <button
+                    key={option.key}
+                    onClick={() => setFilter(option.key as 'pendente' | 'aprovada' | 'entregue' | 'todas')}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                      filter === option.key
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="w-full md:max-w-xs">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Filtrar por solicitante
+              </label>
+              <input
+                type="text"
+                value={searchName}
+                onChange={(e) => setSearchName(e.target.value)}
+                placeholder="Digite o nome do solicitante"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
             </div>
           </div>
         </div>
