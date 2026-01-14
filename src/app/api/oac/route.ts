@@ -7,7 +7,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-// GET - Listar OACs com paginação e filtros
+// GET - Listar OACs com paginaÃ§Ã£o e filtros
 export async function GET(request: NextRequest) {
   try {
     const authResult = await verifyJWTToken(request)
@@ -106,20 +106,20 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Enriquecer dados com informações de local e equipe
+    // Enriquecer dados com informaÃ§Ãµes de local e equipe
     let enrichedOacs = oacs || []
     if (enrichedOacs.length > 0) {
-      // Buscar informações de locais
+      // Buscar informaÃ§Ãµes de locais
       const { data: locaisData } = await supabase
         .from('locais')
         .select('id, local')
       
-      // Buscar informações de equipes
+      // Buscar informaÃ§Ãµes de equipes
       const { data: equipesData } = await supabase
         .from('equipes')
         .select('id, equipe')
 
-      // Criar mapas para lookup rápido usando o ID como chave
+      // Criar mapas para lookup rÃ¡pido usando o ID como chave
       const locaisMap = new Map(locaisData?.map(l => [l.id, { id: l.id, local: l.local }]) || [])
       const equipesMap = new Map(equipesData?.map(e => [e.id, { id: e.id, equipe: e.equipe }]) || [])
 
@@ -176,11 +176,25 @@ export async function POST(request: NextRequest) {
       plano_acao = {}
     } = body
 
-    // Obter equipe e contrato do usuário autenticado
-    const equipe = authResult.user?.equipe_id
-    const contrato = authResult.user?.contrato_raiz
+    // Obter equipe e contrato do usuÃ¡rio autenticado
+    let equipe = authResult.user?.equipe_id
+    let contrato = authResult.user?.contrato_raiz
+    if (!equipe || !contrato) {
+      const { data: usuarioData, error: usuarioError } = await supabase
+        .from('usuarios')
+        .select('equipe_id, contrato_raiz')
+        .eq('matricula', authResult.user?.matricula)
+        .single()
 
-    // Validar campos obrigatórios (apenas os enviados no payload)
+      if (usuarioError) {
+        console.error('Erro ao buscar dados do usuário:', usuarioError)
+      } else {
+        equipe = usuarioData?.equipe_id || equipe
+        contrato = usuarioData?.contrato_raiz || contrato
+      }
+    }
+
+    // Validar campos obrigatÃ³rios (apenas os enviados no payload)
     if (!local || !datahora_inicio || !tempo_observacao || 
         qtd_pessoas_local === undefined || qtd_pessoas_abordadas === undefined) {
       return NextResponse.json(
@@ -189,7 +203,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar se os dados do usuário estão disponíveis
+    // Validar se os dados do usuÃ¡rio estÃ£o disponÃ­veis
     if (!equipe || !contrato) {
       return NextResponse.json(
         { success: false, message: 'Dados do usuário incompletos. Equipe ou contrato não encontrados.' },
@@ -197,7 +211,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar números positivos
+    // Validar nÃºmeros positivos
     if (tempo_observacao <= 0 || qtd_pessoas_local < 0 || qtd_pessoas_abordadas < 0) {
       return NextResponse.json(
         { success: false, message: 'Valores numéricos devem ser válidos' },
@@ -205,7 +219,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validar se qtd_pessoas_abordadas não é maior que qtd_pessoas_local
+    // Validar se qtd_pessoas_abordadas nÃ£o Ã© maior que qtd_pessoas_local
     if (qtd_pessoas_abordadas > qtd_pessoas_local) {
       return NextResponse.json(
         { success: false, message: 'Quantidade de pessoas abordadas não pode ser maior que pessoas no local' },
@@ -254,11 +268,11 @@ export async function POST(request: NextRequest) {
 
       if (desviosError) {
         console.error('Erro ao criar desvios OAC:', desviosError)
-        // Não falha a criação da OAC, apenas registra o erro
+        // NÃ£o falha a criaÃ§Ã£o da OAC, apenas registra o erro
       }
     }
 
-    // Criar plano de ação se existir
+    // Criar plano de aÃ§Ã£o se existir
     if (Object.keys(plano_acao).length > 0) {
       const { error: planoError } = await supabase
         .from('planos_acao_oac')
@@ -272,7 +286,7 @@ export async function POST(request: NextRequest) {
 
       if (planoError) {
         console.error('Erro ao criar plano de ação OAC:', planoError)
-        // Não falha a criação da OAC, apenas registra o erro
+        // NÃ£o falha a criaÃ§Ã£o da OAC, apenas registra o erro
       }
     }
 
@@ -308,7 +322,7 @@ export async function POST(request: NextRequest) {
 
     if (fetchError) {
       console.error('Erro ao buscar OAC criada:', fetchError)
-      // Retorna a OAC básica se não conseguir buscar com relacionamentos
+      // Retorna a OAC bÃ¡sica se nÃ£o conseguir buscar com relacionamentos
       return NextResponse.json({
         success: true,
         data: novaOac,
@@ -330,3 +344,4 @@ export async function POST(request: NextRequest) {
     )
   }
 }
+

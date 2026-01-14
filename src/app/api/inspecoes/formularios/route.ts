@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!authResult.user?.role || !['Admin', 'Editor'].includes(authResult.user.role)) {
+    if (!authResult.user?.role || !['Admin', 'Editor', 'Usuario'].includes(authResult.user.role)) {
       return NextResponse.json({ error: 'Acesso negado. Apenas administradores e editores podem criar formulários.' }, { status: 403 });
     }
 
