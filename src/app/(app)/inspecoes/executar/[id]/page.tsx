@@ -668,79 +668,97 @@ function ExecutarFormularioPage() {
   };
 
   const salvarRascunho = async () => {
-     setSaving(true);
-     try {
-       const token = localStorage.getItem('auth_token');
-       if (!token) return;
+    setSaving(true);
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        toast.error('Sessao expirada. Faca login novamente.');
+        return;
+      }
 
-       let response;
-       // Validar local antes de salvar/criar
-       if (!execucaoData.local_id) {
-         toast.error('Selecione um local antes de salvar');
-         return;
-       }
-       
-       if (isContinuandoExecucao && execucaoId) {
-         // Atualizar execução existente
-         response = await fetch(`/api/inspecoes/execucoes/${execucaoId}`, {
-           method: 'PUT',
-           headers: {
-             'Authorization': `Bearer ${token}`,
-             'Content-Type': 'application/json',
-           },
-          body: JSON.stringify({
-            local_id: execucaoData.local_id,
-            data_inicio: execucaoData.data_inicio,
-            equipamento_tag: execucaoData.equipamento_tag || null,
-            participantes: execucaoData.participantes,
-            respostas: execucaoData.respostas.map(r => ({
-              pergunta_id: r.pergunta_id,
-              resposta: r.valor,
-              observacoes: r.observacao || null
-             })),
-             status: 'em_andamento'
-           }),
-         });
-       } else {
-         // Criar nova execução
-         response = await fetch('/api/inspecoes/execucoes', {
-           method: 'POST',
-           headers: {
-             'Authorization': `Bearer ${token}`,
-             'Content-Type': 'application/json',
-           },
-          body: JSON.stringify({
-            formulario_id: params?.id,
-            local_id: execucaoData.local_id,
-            data_inicio: execucaoData.data_inicio,
-            equipamento_tag: execucaoData.equipamento_tag || null,
-            participantes: execucaoData.participantes,
-            respostas: execucaoData.respostas.map(r => ({
-              pergunta_id: r.pergunta_id,
-              resposta: r.valor,
-              observacoes: r.observacao || null
-             })),
-             status: 'em_andamento'
-           }),
-         });
-       }
+      let response;
+      const execucaoIdAtual = execucaoId || execucaoCriadaId;
+      // Validar local antes de salvar/criar
+      if (!execucaoData.local_id) {
+        toast.error('Selecione um local antes de salvar');
+        return;
+      }
+      
+      if (execucaoIdAtual) {
+        // Atualizar execucao existente
+        response = await fetch(`/api/inspecoes/execucoes/${execucaoIdAtual}`, {
+          method: 'PUT',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+         body: JSON.stringify({
+           local_id: execucaoData.local_id,
+           data_inicio: execucaoData.data_inicio,
+           equipamento_tag: execucaoData.equipamento_tag || null,
+           participantes: execucaoData.participantes,
+           respostas: execucaoData.respostas.map(r => ({
+             pergunta_id: r.pergunta_id,
+             resposta: r.valor,
+             observacoes: r.observacao || null
+            })),
+            status: 'em_andamento'
+          }),
+        });
+      } else {
+        // Criar nova execucao
+        response = await fetch('/api/inspecoes/execucoes', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+         body: JSON.stringify({
+           formulario_id: params?.id,
+           local_id: execucaoData.local_id,
+           data_inicio: execucaoData.data_inicio,
+           equipamento_tag: execucaoData.equipamento_tag || null,
+           participantes: execucaoData.participantes,
+           respostas: execucaoData.respostas.map(r => ({
+             pergunta_id: r.pergunta_id,
+             resposta: r.valor,
+             observacoes: r.observacao || null
+            })),
+            status: 'em_andamento'
+          }),
+        });
+      }
 
-       if (!response.ok) {
-         const errorData = await response.json();
-         throw new Error(errorData.error || 'Erro ao salvar rascunho');
-       }
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Erro ao salvar rascunho');
+      }
 
-       toast.success('Rascunho salvo com sucesso!');
-     } catch (error: unknown) {
-       console.error('Erro ao salvar rascunho:', error);
-       const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar rascunho';
-       toast.error(errorMessage);
-     } finally {
-       setSaving(false);
-     }
-   };
- 
-   const finalizarExecucao = async () => {
+      if (!execucaoIdAtual) {
+        const data = await response.json();
+        const novoExecucaoId = data?.data?.id ?? data?.id;
+        if (novoExecucaoId) {
+          setExecucaoCriadaId(novoExecucaoId);
+          setIsContinuandoExecucao(true);
+          const newUrl = new URL(window.location.href);
+          newUrl.searchParams.set('execucao_id', novoExecucaoId);
+          window.history.replaceState({}, '', newUrl.toString());
+        }
+      } else if (!isContinuandoExecucao) {
+        setIsContinuandoExecucao(true);
+      }
+
+      toast.success('Rascunho salvo com sucesso!');
+    } catch (error: unknown) {
+      console.error('Erro ao salvar rascunho:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Erro ao salvar rascunho';
+      toast.error(errorMessage);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const finalizarExecucao = async () => {
      // Validar respostas (todas obrigatórias)
      if (formulario) {
        const totalPerguntas = formulario.perguntas.length;
@@ -1110,6 +1128,16 @@ function ExecutarFormularioPage() {
                 <div className="max-h-64 overflow-y-auto space-y-2">
                   {usuarios
                     .filter(usuario => !execucaoData.participantes.includes(usuario.matricula))
+                    .filter((usuario) => {
+                      if (!searchUsuarios.trim()) return true;
+                      const termo = searchUsuarios.trim().toLowerCase();
+                      const matricula = String(usuario.matricula ?? '').toLowerCase();
+                      return (
+                        usuario.nome.toLowerCase().includes(termo) ||
+                        usuario.email.toLowerCase().includes(termo) ||
+                        matricula.includes(termo)
+                      );
+                    })
                     .map((usuario) => (
                       <div key={usuario.matricula} className="flex items-center justify-between p-2 border rounded-lg">
                         <div>
@@ -1433,3 +1461,4 @@ function ExecutarFormularioPage() {
 }
 
 export default ExecutarFormularioPage;
+
