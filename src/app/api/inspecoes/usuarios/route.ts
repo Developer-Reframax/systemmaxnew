@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyJWTToken } from '@/lib/jwt-middleware';
 
@@ -7,16 +7,20 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET /api/inspecoes/usuarios - Listar usuários disponíveis
+// GET /api/inspecoes/usuarios - Listar usuarios disponiveis
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
+    // Verificar autenticacao
     const authResult = await verifyJWTToken(request);
     if (!authResult.success) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
     }
+    const contratoRaiz = authResult.user?.contrato_raiz;
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Contrato do usuario nao informado' }, { status: 400 });
+    }
 
-    // Parâmetros de consulta
+    // Parametros de consulta
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const ativo = searchParams.get('ativo');
@@ -31,10 +35,8 @@ export async function GET(request: NextRequest) {
       .select('matricula, nome, email, role, status', { count: 'exact' })
       .order('nome', { ascending: true });
 
-    // Filtrar por contrato_raiz do usuário (RLS)
-    if (authResult.user?.contrato_raiz) {
-      // A query já será filtrada pelo RLS baseado no contrato_raiz
-    }
+    // Filtrar por contrato_raiz do usuario
+    query = query.eq('contrato_raiz', contratoRaiz);
 
     // Aplicar filtros
     if (search) {
@@ -50,13 +52,13 @@ export async function GET(request: NextRequest) {
       query = query.eq('role', role);
     }
 
-    // Aplicar paginação
+    // Aplicar paginacao
     query = query.range(offset, offset + limit - 1);
 
     const { data: usuarios, error, count } = await query;
 
     if (error) {
-      console.error('Erro ao buscar usuários:', error);
+      console.error('Erro ao buscar usuarios:', error);
       return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
     }
 
@@ -70,9 +72,8 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil((count || 0) / limit)
       }
     });
-
   } catch (error) {
-    console.error('Erro na API de usuários:', error);
+    console.error('Erro na API de usuarios:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }

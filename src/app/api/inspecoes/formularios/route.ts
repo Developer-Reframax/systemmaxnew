@@ -15,7 +15,11 @@ export async function GET(request: NextRequest) {
     if (!authResult.success) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
     }
-
+    const contratoRaiz = authResult.user?.contrato_raiz;
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Contrato do usuario nao informado' }, { status: 400 });
+    }
+    
     // Parâmetros de consulta
     const { searchParams } = new URL(request.url);
     const categoria_id = searchParams.get('categoria_id');
@@ -37,6 +41,8 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     // Aplicar filtros
+    query = query.or(`contrato.eq.${contratoRaiz},corporativo.eq.true`);
+
     if (categoria_id) {
       query = query.eq('categoria_id', categoria_id);
     }
@@ -132,6 +138,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const contratoRaiz = authResult.user?.contrato_raiz;
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Contrato do usuario nao informado' }, { status: 400 });
+    }
+
     // Iniciar transação
     const { data: novoFormulario, error: insertError } = await supabase
       .from('formularios_inspecao')
@@ -140,7 +151,8 @@ export async function POST(request: NextRequest) {
         titulo,
         corporativo,
         check_list,
-        ativo: true
+        ativo: true,
+        contrato: contratoRaiz
       })
       .select()
       .single();
@@ -206,3 +218,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
+
+
