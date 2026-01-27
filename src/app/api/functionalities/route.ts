@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
 import { verifyToken } from '@/lib/auth'
+import { createClient } from '@supabase/supabase-js'
+
+const supabase = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY!
+)
 
 function requireAuth(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value
@@ -69,4 +74,3 @@ export async function GET(request: NextRequest) {
     )
   }
 }
-
