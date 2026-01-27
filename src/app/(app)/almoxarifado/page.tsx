@@ -2,16 +2,17 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
+//import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useCanAccessFuncionalidade } from '@/contexts/PermissionsContext'
 import { Badge } from '@/components/ui/badge';
-import { 
-  Package, 
-  ShoppingCart, 
-  CheckCircle, 
-  AlertTriangle, 
-  TrendingUp, 
+import {
+  Package,
+  ShoppingCart,
+  CheckCircle,
+  AlertTriangle,
+  TrendingUp,
   Users,
   FileText,
   Settings
@@ -45,9 +46,33 @@ interface DashboardStats {
 
 function AlmoxarifadoDashboard() {
   const router = useRouter();
-  const { user } = useAuth();
+  //const { user } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // TODO: Preencha estes slugs com os valores configurados nas tabelas:
+  // - USERS_MODULE_SLUG: coluna "slug" da tabela "modulos" referente ao mdulo de usurios.
+  // - *_FUNC_SLUG: coluna "slug" da tabela "modulo_funcionalidades" para cada ao rpida.
+  const ALMOXARIFE_MODULE_SLUG = 'almoxarifado'
+  const ALMOXARIFE_SLUG = 'user-almoxarife'
+  const ALMOXARIFE_GESTOR_SLUG = 'user-gestor-almoxarifado'
+  const ALMOXARIFE_APROVADOR_SLUG = 'user-aprovador-requisicao'
+
+
+  // Hooks de permisses visuais (retornam true enquanto os slugs estiverem vazios).
+
+  const { allowed: useAlmoxarife } = useCanAccessFuncionalidade(
+    ALMOXARIFE_MODULE_SLUG,
+    ALMOXARIFE_SLUG
+  )
+  const { allowed: useGestoralmoxarife } = useCanAccessFuncionalidade(
+    ALMOXARIFE_MODULE_SLUG,
+    ALMOXARIFE_GESTOR_SLUG
+  )
+  const { allowed: useAprovadorreq } = useCanAccessFuncionalidade(
+    ALMOXARIFE_MODULE_SLUG,
+    ALMOXARIFE_APROVADOR_SLUG
+  )
 
   const fetchDashboardData = useCallback(async () => {
     try {
@@ -78,18 +103,7 @@ function AlmoxarifadoDashboard() {
     fetchDashboardData();
   }, [fetchDashboardData]);
 
-  const canManageItems = () => {
-    return user && ['Admin', 'Editor'].includes(user.role);
-  };
-
-  const canManageDeliveries = () => {
-    return user && ['Admin', 'Editor'].includes(user.role);
-  };
-
-  const canApprove = () => {
-    return user && ['Admin', 'Editor'].includes(user.role);
-  };
-
+  
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -99,33 +113,33 @@ function AlmoxarifadoDashboard() {
   }
 
   return (
-      <div className="container mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div className="space-y-1 md:max-w-2xl">
-            <h1 className="text-3xl font-bold text-gray-900">Almoxarifado</h1>
-            <p className="text-gray-600">Gestão de estoque e requisições</p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
-            <Button 
-              onClick={() => router.push('/almoxarifado/catalogo')}
-              className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto justify-center"
-            >
-              <ShoppingCart className="w-4 h-4 mr-2" />
-              Nova Requisição
-            </Button>
-            {canManageItems() && (
-              <Button 
-                onClick={() => router.push('/almoxarifado/itens')}
-                variant="outline"
-                className="hidden md:inline-flex"
-              >
-                <Settings className="w-4 h-4 mr-2" />
-                Gerenciar Itens
-              </Button>
-            )}
-          </div>
+    <div className="container mx-auto p-6 space-y-6">
+      {/* Header */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="space-y-1 md:max-w-2xl">
+          <h1 className="text-3xl font-bold text-gray-900">Almoxarifado</h1>
+          <p className="text-gray-600">Gestão de estoque e requisições</p>
         </div>
+        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+          <Button
+            onClick={() => router.push('/almoxarifado/catalogo')}
+            className="bg-blue-600 hover:bg-blue-700 w-full sm:w-auto justify-center"
+          >
+            <ShoppingCart className="w-4 h-4 mr-2" />
+            Nova Requisição
+          </Button>
+          {useGestoralmoxarife && (
+            <Button
+              onClick={() => router.push('/almoxarifado/itens')}
+              variant="outline"
+              className="hidden md:inline-flex"
+            >
+              <Settings className="w-4 h-4 mr-2" />
+              Gerenciar Itens
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Cards de Estatísticas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -210,7 +224,7 @@ function AlmoxarifadoDashboard() {
           </CardContent>
         </Card>
 
-        {canApprove() && (
+        {useAprovadorreq && (
           <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/almoxarifado/aprovacoes')}>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -224,7 +238,7 @@ function AlmoxarifadoDashboard() {
           </Card>
         )}
 
-        {canManageDeliveries() && (
+        {useAlmoxarife && (
           <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/almoxarifado/entregas')}>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -238,7 +252,7 @@ function AlmoxarifadoDashboard() {
           </Card>
         )}
 
-        {canManageItems() && (
+        {useGestoralmoxarife && (
           <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => router.push('/almoxarifado/itens')}>
             <CardHeader>
               <CardTitle className="flex items-center">
@@ -293,8 +307,8 @@ function AlmoxarifadoDashboard() {
                 </div>
               ))}
               {stats.alertas_estoque.length > 5 && (
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   className="w-full"
                   onClick={() => router.push('/almoxarifado/estoque')}
                 >
@@ -337,7 +351,7 @@ function AlmoxarifadoDashboard() {
           </CardContent>
         </Card>
       )}
-      </div>
+    </div>
   );
 }
 
