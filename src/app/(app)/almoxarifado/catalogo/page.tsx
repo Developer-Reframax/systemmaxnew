@@ -45,7 +45,7 @@ const CART_TIMESTAMP_KEY = 'almoxarifado_cart_timestamp';
 const CART_EXPIRY_TIME = 24 * 60 * 60 * 1000; // 24 horas
 
 function CatalogoItens() {
-  const { loading: authLoading } = useAuth();
+  const { loading: authLoading, user } = useAuth();
   const router = useRouter();
   const [filteredItems, setFilteredItems] = useState<Item[]>([]);
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -59,8 +59,11 @@ function CatalogoItens() {
 
   const fetchItems = useCallback(async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
+      if (authLoading) {
+        return;
+      }
+      if (!user) {
+        setLoading(false);
         return;
       }
 
@@ -98,7 +101,7 @@ function CatalogoItens() {
     } finally {
       setLoading(false);
     }
-  }, [page, searchTerm, selectedCategory]);
+  }, [authLoading, page, searchTerm, selectedCategory, user]);
 
   const loadCartFromStorage = useCallback(() => {
     try {

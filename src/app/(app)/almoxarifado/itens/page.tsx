@@ -14,6 +14,7 @@ interface Item {
   unidade_medida: string
   estoque_atual: number
   estoque_minimo: number
+  contrato?: string
   preco_unitario?: number
   imagem_url?: string
   ativo: boolean
@@ -28,6 +29,7 @@ interface ItemForm {
   unidade_medida: string
   estoque_atual: number
   estoque_minimo: number
+  contrato: string
   preco_unitario?: number
   ativo: boolean
 }
@@ -55,7 +57,7 @@ const UNIDADES_MEDIDA = [
 
 function GerenciamentoItens() {
   const router = useRouter()
-  const { loading: authLoading } = useAuth()
+  const { loading: authLoading, user } = useAuth()
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
@@ -75,6 +77,7 @@ function GerenciamentoItens() {
     unidade_medida: '',
     estoque_atual: 0,
     estoque_minimo: 0,
+    contrato: '',
     preco_unitario: 0,
     ativo: true
   })
@@ -127,6 +130,7 @@ function GerenciamentoItens() {
         unidade_medida: item.unidade_medida,
         estoque_atual: item.estoque_atual,
         estoque_minimo: item.estoque_minimo,
+        contrato: item.contrato ?? user?.contrato_raiz ?? '',
         preco_unitario: item.preco_unitario || 0,
         ativo: item.ativo
       })
@@ -142,6 +146,7 @@ function GerenciamentoItens() {
         unidade_medida: '',
         estoque_atual: 0,
         estoque_minimo: 0,
+        contrato: user?.contrato_raiz ?? '',
         preco_unitario: 0,
         ativo: true
       })
@@ -181,9 +186,10 @@ function GerenciamentoItens() {
 
     try {
       const formDataToSend = new FormData()
+      const contrato = formData.contrato || user?.contrato_raiz || ''
       
       // Adicionar dados do formulário
-      Object.entries(formData).forEach(([key, value]) => {
+      Object.entries({ ...formData, contrato }).forEach(([key, value]) => {
         formDataToSend.append(key, value.toString())
       })
 
