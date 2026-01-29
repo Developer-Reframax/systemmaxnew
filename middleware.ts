@@ -4,6 +4,7 @@ import { NextResponse } from 'next/server'
 const AUTH_COOKIE = 'auth_token'
 const PUBLIC_PATHS = [
   '/login',
+  '/guia-implementacao',
   '/api/auth/login',
   '/api/auth/me',
   '/api/auth/logout',

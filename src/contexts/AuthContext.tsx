@@ -6,6 +6,7 @@ import type { AuthContextType, AuthProviderProps } from '@/lib/types/auth'
 import { hasRole, isAuthenticated, checkVerificationComplete } from '@/lib/auth-utils'
 import { useVerification } from '@/hooks/useVerification'
 import TermsModal from '@/components/TermsModal'
+import VerificationOverlay from '@/components/Loading/VerificationOverlay'
 import {
   clearStoredSession,
   endSpecificSession,
@@ -130,14 +131,17 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
     isVerificationComplete: checkVerificationComplete(user, isVerificationComplete())
   }
 
+  const showVerificationOverlay =
+    !!user && (loading || verificationLoading) && !showTermsModal
+
   return (
     <AuthContext.Provider value={value}>
       {children}
 
+      {showVerificationOverlay && <VerificationOverlay />}
       {showTermsModal && (
         <TermsModal isOpen={showTermsModal} onAccept={acceptTerms} onDecline={declineTerms} />
       )}
     </AuthContext.Provider>
   )
 }
-
