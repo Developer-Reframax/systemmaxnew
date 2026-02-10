@@ -1,48 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
-
-interface JWTPayload {
-  userId: string
-  email: string
-  role: string
-}
-
-// Função para verificar autenticação e autorização
-async function verifyAuth(request: NextRequest): Promise<{ user: JWTPayload; error?: string }> {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '')
-  
-  if (!token) {
-    return { user: {} as JWTPayload, error: 'Token não fornecido' }
-  }
-
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload
-    
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!['Admin', 'Editor'].includes(decoded.role)) {
-      return { user: decoded, error: 'Acesso negado. Apenas administradores e editores podem gerenciar contratos de usuários.' }
-    }
-
-    return { user: decoded }
-  } catch {
-    return { user: {} as JWTPayload, error: 'Token inválido' }
-  }
-}
 
 // GET - Buscar contratos de um usuário específico
 export async function GET(request: NextRequest) {
   try {
-    const { error: authError } = await verifyAuth(request)
-    if (authError) {
-      return NextResponse.json({ error: authError }, { status: 401 })
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
+    }
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -84,9 +59,13 @@ export async function GET(request: NextRequest) {
 // POST - Adicionar acesso de usuário a contrato
 export async function POST(request: NextRequest) {
   try {
-    const { error: authError } = await verifyAuth(request)
-    if (authError) {
-      return NextResponse.json({ error: authError }, { status: 401 })
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
+    }
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     const { matricula, codigo } = await request.json()
@@ -157,9 +136,13 @@ export async function POST(request: NextRequest) {
 // DELETE - Remover acesso de usuário a contrato
 export async function DELETE(request: NextRequest) {
   try {
-    const { error: authError } = await verifyAuth(request)
-    if (authError) {
-      return NextResponse.json({ error: authError }, { status: 401 })
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json({ error: 'Token de acesso requerido' }, { status: 401 })
+    }
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)

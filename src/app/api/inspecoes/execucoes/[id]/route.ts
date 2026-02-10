@@ -42,13 +42,51 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET /api/inspecoes/execucoes/[id] - Buscar execução específica
+// Se existir pergunta impeditiva nao conforme em checklist, marcar equipamento como impedido
+async function marcarEquipamentoImpedidoSeNecessario(
+  formularioId: string | null | undefined,
+  respostas: Array<{ pergunta_id: string; resposta: string }> | undefined,
+  equipamentoTag: string | null | undefined
+) {
+  try {
+    if (!formularioId || !equipamentoTag || !respostas || respostas.length === 0) return;
+
+    const perguntasNaoConforme = respostas
+      .filter((r) => r.resposta === 'nao_conforme' && r.pergunta_id)
+      .map((r) => r.pergunta_id);
+
+    if (perguntasNaoConforme.length === 0) return;
+
+    const { data: perguntasImpeditivas, error } = await supabase
+      .from('perguntas_formulario')
+      .select('id')
+      .eq('formulario_id', formularioId)
+      .eq('impeditivo', true)
+      .in('id', perguntasNaoConforme);
+
+    if (error) {
+      console.warn('Falha ao verificar perguntas impeditivas para impedir equipamento:', error);
+      return;
+    }
+
+    if (perguntasImpeditivas && perguntasImpeditivas.length > 0) {
+      await supabase
+        .from('equipamentos_inspecao')
+        .update({ impedido: true })
+        .eq('tag', equipamentoTag);
+    }
+  } catch (err) {
+    console.warn('Nao foi possivel atualizar impedimento do equipamento:', err);
+  }
+}
+
+// GET /api/inspecoes/execucoes/[id] - Buscar execucao especifica
 export async function GET(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
+    // Verificar autenticacao
     const authResult = await verifyJWTToken(request);
     if (!authResult.success) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
@@ -56,7 +94,7 @@ export async function GET(
 
     const { id } = await context.params;
 
-    // Buscar execução com todos os dados relacionados
+    // Buscar execucao com todos os dados relacionados
     const { data: execucao, error } = await supabase
       .from('execucoes_inspecao')
       .select(`
@@ -84,20 +122,19 @@ export async function GET(
       .single();
 
     if (error) {
-      console.error('Erro ao buscar execução:', error);
+      console.error('Erro ao buscar execucao:', error);
       if (error.code === 'PGRST116') {
-        return NextResponse.json({ error: 'Execução não encontrada' }, { status: 404 });
+        return NextResponse.json({ error: 'Execucao nao encontrada' }, { status: 404 });
       }
       return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
     }
 
     if (!execucao) {
-      return NextResponse.json({ error: 'Execução não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Execucao nao encontrada' }, { status: 404 });
     }
 
-    // Verificar se o usuário tem acesso à execução
-    // RLS já filtra por contrato_raiz, mas vamos verificar se é executor ou admin
-    const podeVisualizar = 
+    // Verificar se o usuario tem acesso a execucao
+    const podeVisualizar =
       execucao.matricula_executor === authResult.user?.matricula ||
       authResult.user?.role === 'Admin' ||
       authResult.user?.role === 'Editor';
@@ -115,7 +152,7 @@ export async function GET(
       return acc;
     }, {} as RespostasPorPergunta) || {};
 
-    // Adicionar respostas às perguntas do formulário
+    // Adicionar respostas as perguntas do formulario
     if (execucao.formulario?.perguntas) {
       execucao.formulario.perguntas = execucao.formulario.perguntas.map((pergunta: Pergunta) => ({
         ...pergunta,
@@ -129,18 +166,18 @@ export async function GET(
     });
 
   } catch (error) {
-    console.error('Erro na API de busca de execução:', error);
+    console.error('Erro na API de busca de execucao:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
 
-// PUT /api/inspecoes/execucoes/[id] - Atualizar execução específica
+// PUT /api/inspecoes/execucoes/[id] - Atualizar execucao especifica
 export async function PUT(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
+    // Verificar autenticacao
     const authResult = await verifyJWTToken(request);
     if (!authResult.success) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
@@ -148,31 +185,50 @@ export async function PUT(
 
     const { id } = await context.params;
     const body = await request.json();
-    const { local_id, participantes = [], status, observacoes_gerais, respostas, concluir = false } = body;
+    const { local_id, participantes = [], status, observacoes_gerais, respostas, concluir = false, equipamento_tag } = body;
 
-    // Verificar se a execução existe
+    // Verificar se a execucao existe
     const { data: execucaoExistente } = await supabase
       .from('execucoes_inspecao')
-      .select('id, matricula_executor, status, local_id')
+      .select('id, matricula_executor, status, local_id, formulario_id, tag_equipamento')
       .eq('id', id)
       .single();
 
     if (!execucaoExistente) {
-      return NextResponse.json({ error: 'Execução não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Execucao nao encontrada' }, { status: 404 });
     }
 
-    // Verificar permissões
-    const podeEditar = 
+    // Verificar permissoes
+    const podeEditar =
       execucaoExistente.matricula_executor === authResult.user?.matricula ||
       authResult.user?.role === 'Admin';
 
     if (!podeEditar) {
-      return NextResponse.json({ error: 'Acesso negado. Apenas o executor ou administradores podem editar esta execução.' }, { status: 403 });
+      return NextResponse.json({ error: 'Acesso negado. Apenas o executor ou administradores podem editar esta execucao.' }, { status: 403 });
     }
 
-    // Não permitir edição de execuções concluídas ou canceladas (exceto admin)
+    // Nao permitir edicao de execucoes concluidas ou canceladas (exceto admin)
     if (execucaoExistente.status !== 'em_andamento' && authResult.user?.role !== 'Admin') {
-      return NextResponse.json({ error: 'Não é possível editar execuções que não estão em andamento' }, { status: 409 });
+      return NextResponse.json({ error: 'Nao e possivel editar execucoes que nao estao em andamento' }, { status: 409 });
+    }
+
+    // Validar checklist quanto a tag de equipamento
+    let formularioCheckList = false;
+    if (execucaoExistente.formulario_id) {
+      const { data: formCheck } = await supabase
+        .from('formularios_inspecao')
+        .select('check_list')
+        .eq('id', execucaoExistente.formulario_id)
+        .single();
+
+      formularioCheckList = !!formCheck?.check_list;
+
+      if (formularioCheckList && (concluir || status === 'concluida')) {
+        const tag = equipamento_tag ?? execucaoExistente.tag_equipamento;
+        if (!tag) {
+          return NextResponse.json({ error: 'Tag do equipamento e obrigatoria para concluir checklists' }, { status: 400 });
+        }
+      }
     }
 
     // Atualizar local se fornecido
@@ -184,7 +240,7 @@ export async function PUT(
         .single();
 
       if (!localValido) {
-        return NextResponse.json({ error: 'Local não encontrado' }, { status: 400 });
+        return NextResponse.json({ error: 'Local nao encontrado' }, { status: 400 });
       }
 
       const { error: erroAtualizarLocal } = await supabase
@@ -193,7 +249,7 @@ export async function PUT(
         .eq('id', id);
 
       if (erroAtualizarLocal) {
-        console.error('Erro ao atualizar local da execução:', erroAtualizarLocal);
+        console.error('Erro ao atualizar local da execucao:', erroAtualizarLocal);
         return NextResponse.json({ error: 'Erro ao atualizar local' }, { status: 500 });
       }
     }
@@ -206,8 +262,8 @@ export async function PUT(
         .eq('id', id);
 
       if (erroAtualizarDataInicio) {
-        console.error('Erro ao atualizar data de início:', erroAtualizarDataInicio);
-        return NextResponse.json({ error: 'Erro ao atualizar data de início' }, { status: 500 });
+        console.error('Erro ao atualizar data de inicio:', erroAtualizarDataInicio);
+        return NextResponse.json({ error: 'Erro ao atualizar data de inicio' }, { status: 500 });
       }
     }
     
@@ -236,7 +292,7 @@ export async function PUT(
         if (!usuariosValidos || usuariosValidos.length !== matriculasParticipantes.length) {
           const encontrados = usuariosValidos?.map(u => u.matricula) || [];
           const naoEncontrados = matriculasParticipantes.filter((m: string) => !encontrados.includes(m));
-          return NextResponse.json({ error: `Participantes não encontrados: ${naoEncontrados.join(', ')}` }, { status: 400 });
+          return NextResponse.json({ error: `Participantes nao encontrados: ${naoEncontrados.join(', ')}` }, { status: 400 });
         }
       }
 
@@ -273,13 +329,13 @@ export async function PUT(
         const { pergunta_id, resposta: valorResposta, observacoes } = resposta;
 
         if (!pergunta_id || !valorResposta) {
-          continue; // Pular respostas inválidas
+          continue; // Pular respostas invalidas
         }
 
         // Validar valor da resposta
         if (!['conforme', 'nao_conforme', 'nao_aplica'].includes(valorResposta)) {
           return NextResponse.json({ 
-            error: `Valor de resposta inválido: ${valorResposta}` 
+            error: `Valor de resposta invalido: ${valorResposta}` 
           }, { status: 400 });
         }
 
@@ -302,8 +358,8 @@ export async function PUT(
       }
     }
 
-    // Preparar dados para atualização
-    const dadosAtualizacao: DadosAtualizacao = {};
+    // Preparar dados para atualizacao
+    const dadosAtualizacao: DadosAtualizacao & { tag_equipamento?: string | null } = {};
 
     if (status) {
       dadosAtualizacao.status = status;
@@ -313,13 +369,24 @@ export async function PUT(
       dadosAtualizacao.observacoes_gerais = observacoes_gerais;
     }
 
-    // Se concluindo a execução
+    if (equipamento_tag !== undefined) {
+      dadosAtualizacao.tag_equipamento = equipamento_tag || null;
+    }
+
+    if ((concluir || status === 'concluida') && formularioCheckList) {
+      const tagEquip = equipamento_tag ?? execucaoExistente.tag_equipamento;
+      if (tagEquip) {
+        await marcarEquipamentoImpedidoSeNecessario(execucaoExistente.formulario_id, respostas, tagEquip);
+      }
+    }
+
+    // Se concluindo a execucao
     if (concluir || status === 'concluida') {
       dadosAtualizacao.status = 'concluida';
       dadosAtualizacao.data_conclusao = new Date().toISOString();
     }
 
-    // Atualizar execução se há dados para atualizar
+    // Atualizar execucao se ha dados para atualizar
     if (Object.keys(dadosAtualizacao).length > 0) {
       const { error: updateError } = await supabase
         .from('execucoes_inspecao')
@@ -327,17 +394,17 @@ export async function PUT(
         .eq('id', id);
 
       if (updateError) {
-        console.error('Erro ao atualizar execução:', updateError);
-        return NextResponse.json({ error: 'Erro ao atualizar execução' }, { status: 500 });
+        console.error('Erro ao atualizar execucao:', updateError);
+        return NextResponse.json({ error: 'Erro ao atualizar execucao' }, { status: 500 });
       }
     }
 
-    // Se concluída, calcular nota final
+    // Se concluida, calcular nota final
     if (dadosAtualizacao.status === 'concluida') {
       await supabase.rpc('calcular_nota_execucao', { execucao_uuid: id });
     }
 
-    // Buscar execução atualizada
+    // Buscar execucao atualizada
     const { data: execucaoAtualizada } = await supabase
       .from('execucoes_inspecao')
       .select(`
@@ -359,35 +426,35 @@ export async function PUT(
     return NextResponse.json({
       success: true,
       data: execucaoAtualizada,
-      message: concluir ? 'Execução concluída com sucesso' : 'Execução atualizada com sucesso'
+      message: concluir ? 'Execucao concluida com sucesso' : 'Execucao atualizada com sucesso'
     });
 
   } catch (error) {
-    console.error('Erro na API de atualização de execução:', error);
+    console.error('Erro na API de atualizacao de execucao:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
 
-// DELETE /api/inspecoes/execucoes/[id] - Cancelar execução (apenas Admin)
+// DELETE /api/inspecoes/execucoes/[id] - Cancelar execucao (apenas Admin)
 export async function DELETE(
   request: NextRequest,
   context: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
+    // Verificar autenticacao
     const authResult = await verifyJWTToken(request);
     if (!authResult.success) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
     }
 
-    // Apenas administradores podem cancelar execuções
+    // Apenas administradores podem cancelar execucoes
     if (authResult.user?.role !== 'Admin') {
-      return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem cancelar execuções.' }, { status: 403 });
+      return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem cancelar execucoes.' }, { status: 403 });
     }
 
     const { id } = await context.params;
 
-    // Verificar se a execução existe
+    // Verificar se a execucao existe
     const { data: execucao } = await supabase
       .from('execucoes_inspecao')
       .select('id, status')
@@ -395,15 +462,15 @@ export async function DELETE(
       .single();
 
     if (!execucao) {
-      return NextResponse.json({ error: 'Execução não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Execucao nao encontrada' }, { status: 404 });
     }
 
-    // Não permitir cancelamento de execuções já concluídas
+    // Nao permitir cancelamento de execucoes ja concluidas
     if (execucao.status === 'concluida') {
-      return NextResponse.json({ error: 'Não é possível cancelar execuções concluídas' }, { status: 409 });
+      return NextResponse.json({ error: 'Nao e possivel cancelar execucoes concluidas' }, { status: 409 });
     }
 
-    // Cancelar execução (marcar como cancelada ao invés de deletar)
+    // Cancelar execucao (marcar como cancelada ao inves de deletar)
     const { error: updateError } = await supabase
       .from('execucoes_inspecao')
       .update({
@@ -413,17 +480,17 @@ export async function DELETE(
       .eq('id', id);
 
     if (updateError) {
-      console.error('Erro ao cancelar execução:', updateError);
-      return NextResponse.json({ error: 'Erro ao cancelar execução' }, { status: 500 });
+      console.error('Erro ao cancelar execucao:', updateError);
+      return NextResponse.json({ error: 'Erro ao cancelar execucao' }, { status: 500 });
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Execução cancelada com sucesso'
+      message: 'Execucao cancelada com sucesso'
     });
 
   } catch (error) {
-    console.error('Erro na API de cancelamento de execução:', error);
+    console.error('Erro na API de cancelamento de execucao:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }

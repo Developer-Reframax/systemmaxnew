@@ -26,11 +26,17 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
+    const contratoUsuario = authResult.user?.contrato_raiz;
+    if (!contratoUsuario) {
+      return NextResponse.json({ error: 'Usuário autenticado sem contrato_raiz definido' }, { status: 400 });
+    }
+
     // Construir query
     let query = supabase
       .from('itens_almoxarifado')
       .select('*', { count: 'exact' })
       .eq('ativo', true)
+      .eq('contrato', contratoUsuario)
       .order('nome');
 
     // Aplicar filtros
@@ -85,7 +91,7 @@ export async function POST(request: NextRequest) {
     // Usuário autenticado pode criar itens
 
     const contentType = request.headers.get('content-type');
-    let nome, descricao, categoria, preco_unitario, estoque_atual, estoque_minimo, imagem_url;
+    let nome, descricao, categoria, preco_unitario, estoque_atual, estoque_minimo, imagem_url, contrato;
     let imageFile: File | null = null;
 
     if (contentType?.includes('multipart/form-data')) {
@@ -98,17 +104,26 @@ export async function POST(request: NextRequest) {
       estoque_atual = parseInt(formData.get('estoque_atual') as string);
       estoque_minimo = parseInt(formData.get('estoque_minimo') as string);
       imageFile = formData.get('image') as File;
+      contrato = formData.get('contrato') as string;
     } else {
       // Processar JSON
       const body = await request.json();
-      ({ nome, descricao, categoria, preco_unitario, estoque_atual, estoque_minimo, imagem_url } = body);
+      ({ nome, descricao, categoria, preco_unitario, estoque_atual, estoque_minimo, imagem_url, contrato } = body);
     }
 
+    const contratoUsuario = authResult.user?.contrato_raiz;
+    if (!contratoUsuario) {
+      return NextResponse.json({ 
+        error: 'Usuário autenticado sem contrato_raiz definido' 
+      }, { status: 400 });
+    }
+    contrato = contratoUsuario;
+
     // Validar campos obrigatórios
-    if (!nome || !descricao || !categoria || preco_unitario === undefined || 
+    if (!nome || !descricao || !categoria || !contrato || preco_unitario === undefined || 
         estoque_atual === undefined || estoque_minimo === undefined) {
       return NextResponse.json({ 
-        error: 'Campos obrigatórios: nome, descricao, categoria, preco_unitario, estoque_atual, estoque_minimo' 
+        error: 'Campos obrigatórios: nome, descricao, categoria, contrato, preco_unitario, estoque_atual, estoque_minimo' 
       }, { status: 400 });
     }
 
@@ -157,6 +172,7 @@ export async function POST(request: NextRequest) {
         nome,
         descricao,
         categoria,
+        contrato,
         preco_unitario,
         estoque_atual,
         estoque_minimo,

@@ -75,7 +75,7 @@ export async function PUT(
 
     const { id } = await context.params;
     const body = await request.json();
-    const { categoria_id, titulo, corporativo, ativo, perguntas } = body;
+    const { categoria_id, titulo, corporativo, check_list, ativo, perguntas } = body;
 
     // Validar campos obrigatórios
     if (!categoria_id || !titulo) {
@@ -87,7 +87,7 @@ export async function PUT(
     // Verificar se o formulário existe
     const { data: formularioExistente } = await supabase
       .from('formularios_inspecao')
-      .select('id')
+      .select('id, check_list')
       .eq('id', id)
       .single();
 
@@ -128,6 +128,7 @@ export async function PUT(
         categoria_id,
         titulo,
         corporativo: corporativo !== undefined ? corporativo : false,
+        check_list: check_list !== undefined ? check_list : (formularioExistente?.check_list ?? false),
         ativo: ativo !== undefined ? ativo : true
       })
       .eq('id', id);
@@ -163,7 +164,8 @@ export async function PUT(
           ordem: index + 1,
           permite_conforme: pergunta.permite_conforme !== false,
           permite_nao_conforme: pergunta.permite_nao_conforme !== false,
-          permite_nao_aplica: pergunta.permite_nao_aplica !== false
+          permite_nao_aplica: pergunta.permite_nao_aplica !== false,
+          impeditivo: pergunta.impeditivo === true
         }));
 
         const { error: perguntasError } = await supabase
@@ -276,4 +278,5 @@ interface PerguntaInput {
   permite_conforme?: boolean;
   permite_nao_conforme?: boolean;
   permite_nao_aplica?: boolean;
+   impeditivo?: boolean;
 }

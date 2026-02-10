@@ -46,11 +46,6 @@ export default function PlanosAcaoList({
 
   const fetchPlanos = useCallback(async () => {
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        toast.error('Token de autenticação não encontrado');
-        return;
-      }
 
       const params = new URLSearchParams();
       if (filters.status) params.append('status', filters.status);
@@ -58,9 +53,7 @@ export default function PlanosAcaoList({
       if (filters.vencidos) params.append('vencidos', 'true');
 
       const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao?${params}`, {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        method: 'GET'
       });
 
       if (!response.ok) {
@@ -93,17 +86,10 @@ export default function PlanosAcaoList({
     if (!confirm('Tem certeza que deseja deletar este plano de ação?')) return;
 
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        toast.error('Token de autenticação não encontrado');
-        return;
-      }
+      
 
       const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao/${planoId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
+        method: 'DELETE'
       });
 
       if (!response.ok) {

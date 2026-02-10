@@ -88,7 +88,22 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { matricula, nome, email, funcao, contrato_raiz, status, role, phone, password_hash, letra_id, equipe_id } = body
+    const {
+      matricula,
+      nome,
+      email,
+      funcao,
+      contrato_raiz,
+      status,
+      role,
+      phone,
+      password_hash,
+      letra_id,
+      equipe_id,
+      terms_reconhecimento_facial,
+      termsReconhecimentoFacial,
+      termsBiometria
+    } = body
 
     if (!matricula) {
       return NextResponse.json(
@@ -114,9 +129,15 @@ export async function PUT(request: NextRequest) {
     if (email) updateData.email = email
     if (funcao) updateData.funcao = funcao
     if (contrato_raiz) updateData.contrato_raiz = contrato_raiz
-    if (phone) updateData.phone = phone
+    if (phone !== undefined) updateData.phone = phone
     if (letra_id !== undefined) updateData.letra_id = letra_id
     if (equipe_id !== undefined) updateData.equipe_id = equipe_id
+
+    const consentFlag =
+      terms_reconhecimento_facial ??
+      termsReconhecimentoFacial ??
+      termsBiometria
+    if (consentFlag !== undefined) updateData.terms_reconhecimento_facial = consentFlag
     
     // Hash da senha se fornecida
     if (password_hash) {
@@ -127,6 +148,13 @@ export async function PUT(request: NextRequest) {
     if (isAdmin) {
       if (role) updateData.role = role
       if (status) updateData.status = status
+    }
+
+    if (Object.keys(updateData).length === 0) {
+      return NextResponse.json(
+        { success: false, message: 'Nenhum dado válido para atualizar' },
+        { status: 400 }
+      )
     }
 
     // Verificar se o usuário existe antes de atualizar

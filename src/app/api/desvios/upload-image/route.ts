@@ -1,34 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-const JWT_SECRET = process.env.JWT_SECRET!
+const AUTH_ERROR = { error: 'Token de acesso requerido'}
 
 export async function POST(request: NextRequest) {
   try {
     // Verificar autenticação
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Token de autorização necessário' },
-        { status: 401 }
-      )
-    }
-
-    const token = authHeader.substring(7)
-
-    try {
-      jwt.verify(token, JWT_SECRET)
-    } catch {
-      return NextResponse.json(
-        { error: 'Token inválido' },
-        { status: 401 }
-      )
-    }
+   const token = request.cookies.get('auth_token')?.value
+       if (!token) {
+         return NextResponse.json(AUTH_ERROR, { status: 401 })
+       }
+       const user = verifyToken(token)
+       if (!user) {
+         return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
+       }
 
     // Obter dados do formulário
     const formData = await request.formData()

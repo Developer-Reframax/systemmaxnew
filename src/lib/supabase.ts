@@ -30,6 +30,19 @@ export interface Usuario {
   updated_at: string
   letra_id?: string // ID da letra associada
   equipe_id?: string // ID da equipe associada
+  face_descriptors?: {
+    front?: number[]
+    right?: number[]
+    left?: number[]
+  }
+  face_snapshots?: {
+    front?: string
+    right?: string
+    left?: string
+  }
+  face_enrollment_status?: 'pendente' | 'ativo' | 'inativo'
+  face_last_enrolled_at?: string
+  face_model_version?: string
   contratos?: Contrato[] // Contratos que o usuário tem acesso
   letra?: Letra // Relacionamento com letra
   equipe?: Equipe // Relacionamento com equipe
@@ -48,13 +61,14 @@ export interface Contrato {
 }
 
 export interface Sessao {
-  id: number
-  usuario_id: number
-  modulo_id: number
-  inicio: string
-  fim?: string
-  created_at: string
-  updated_at?: string
+  id: string
+  matricula_usuario: number
+  inicio_sessao: string
+  fim_sessao?: string | null
+  paginas_acessadas?: number | null
+  modulos_acessados?: unknown[] | null
+  tempo_total_segundos?: number | null
+  created_at?: string
 }
 
 export interface Modulo {
@@ -63,6 +77,7 @@ export interface Modulo {
   descricao: string
   tipo: 'corporativo' | 'exclusivo'
   ativo: boolean
+  slug: string
   created_at: string
 }
 
@@ -98,6 +113,8 @@ export interface Funcionalidade {
   nome: string
   descricao?: string
   ativa: boolean
+  slug: string
+  tipo?: 'corporativo' | 'exclusivo'
   created_at: string
   modulo?: Modulo
 }
@@ -121,3 +138,4 @@ export interface FuncionalidadeUsuario {
   created_at: string
   funcionalidade?: Funcionalidade
 }
+

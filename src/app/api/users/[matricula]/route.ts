@@ -1,188 +1,117 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
 
-// Cliente Supabase com service role para bypass do RLS
-const supabaseUrl = process.env.SUPABASE_URL!
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey)
+const supabase = createClient(
+  process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL!,
+  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_SERVICE_ROLE_KEY!
+)
 
-// Cliente Supabase normal para operações que respeitam RLS
-import { supabase } from '@/lib/supabase'
+const ALLOWED_FIELDS = ['email', 'telefone', 'phone', 'avatar_url'] as const
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
-
-interface JWTPayload {
-  matricula: number
-  email: string
-  role: string
-}
-
-// Função para verificar autenticação
-async function verifyAuth(request: NextRequest): Promise<{ user: JWTPayload; error?: string }> {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '')
-  
+function requireAuth(request: NextRequest) {
+  const token = request.cookies.get('auth_token')?.value
   if (!token) {
-    return { user: {} as JWTPayload, error: 'Token não fornecido' }
+    return { user: null, response: NextResponse.json({ success: false, message: 'Token de autenticacao nao encontrado' }, { status: 401 }) }
   }
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload
-    return { user: decoded }
-  } catch {
-    return { user: {} as JWTPayload, error: 'Token inválido' }
+  const user = verifyToken(token)
+  if (!user) {
+    return { user: null, response: NextResponse.json({ success: false, message: 'Token invalido ou expirado' }, { status: 401 }) }
   }
+
+  return { user, response: null as NextResponse | null }
 }
 
-export async function GET(request: NextRequest, { params }: { params: Promise<{ matricula: string }> }) {
+export async function GET(
+  request: NextRequest,
+  { params }: { params: Promise<{ matricula: string }> }
+) {
   try {
-    const { user, error: authError } = await verifyAuth(request)
-    if (authError) {
-      return NextResponse.json({ error: authError }, { status: 401 })
+    const { user, response } = requireAuth(request)
+    if (!user) return response!
+
+    const { matricula: matriculaParam } = await params
+
+    const isSelf = String(user.matricula) === matriculaParam
+    const isPrivileged = ['Admin', 'Editor'].includes(user.role)
+    if (!isSelf && !isPrivileged) {
+      return NextResponse.json({ success: false, message: 'Acesso negado' }, { status: 403 })
     }
 
-    const { matricula: matriculaStr } = await params
-    const matricula = parseInt(matriculaStr)
+    const matriculaNumber = Number(matriculaParam)
 
-    // Verificar se o usuário pode acessar este perfil (Admin ou próprio usuário)
-    if (user.role !== 'Admin' && user.matricula !== matricula) {
-      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    const tryFetch = async (value: string | number) =>
+      supabase
+        .from('usuarios')
+        .select('matricula, nome, email, phone, role, status, funcao')
+        .eq('matricula', value)
+        .maybeSingle()
+
+    let { data, error } = await tryFetch(matriculaParam)
+    if ((!data || error) && !Number.isNaN(matriculaNumber)) {
+      const second = await tryFetch(matriculaNumber)
+      data = second.data
+      error = second.error
     }
 
-    // Buscar dados do usuário
-    const { data: userData, error } = await supabase
-      .from('usuarios')
-      .select('matricula, nome, email, role, funcao, contrato_raiz, status, created_at')
-      .eq('matricula', matricula)
-      .single()
-
-    if (error || !userData) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 })
+    if (error || !data) {
+      console.error('Erro ao buscar usuario:', error)
+      return NextResponse.json({ success: false, message: 'Usuario nao encontrado' }, { status: 404 })
     }
 
-    return NextResponse.json(userData)
+    return NextResponse.json({ success: true, user: data })
   } catch (error) {
-    console.error('Erro ao buscar usuário:', error)
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
+    console.error('Erro no GET /api/users/[matricula]:', error)
+    return NextResponse.json({ success: false, message: 'Erro interno do servidor' }, { status: 500 })
   }
 }
 
-export async function PUT(request: NextRequest, { params }: { params: Promise<{ matricula: string }> }) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ matricula: string }> }
+) {
   try {
-    const { user, error: authError } = await verifyAuth(request)
-    if (authError) {
-      return NextResponse.json({ error: authError }, { status: 401 })
+    const { user, response } = requireAuth(request)
+    if (!user) return response!
+
+    const { matricula: matriculaParam } = await params
+    const matriculaNumber = Number(matriculaParam)
+    if (Number.isNaN(matriculaNumber)) {
+      return NextResponse.json({ success: false, message: 'Matricula invalida' }, { status: 400 })
     }
 
-    const { matricula: matriculaStr } = await params
-    const matricula = parseInt(matriculaStr)
-
-    // Verificar se o usuário pode atualizar este perfil (Admin ou próprio usuário)
-    if (user.role !== 'Admin' && user.matricula !== matricula) {
-      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    const isSelf = String(user.matricula) === matriculaParam
+    const isPrivileged = ['Admin', 'Editor'].includes(user.role)
+    if (!isSelf && !isPrivileged) {
+      return NextResponse.json({ success: false, message: 'Acesso negado' }, { status: 403 })
     }
 
     const body = await request.json()
-    const { nome, email, role, funcao, contrato_raiz, status } = body
+    const updatePayload: Record<string, unknown> = {}
+    ALLOWED_FIELDS.forEach((field) => {
+      if (body[field] !== undefined) updatePayload[field] = body[field]
+    })
 
-    // Atualizar dados do usuário
+    if (Object.keys(updatePayload).length === 0) {
+      return NextResponse.json({ success: false, message: 'Nenhum dado valido para atualizar' }, { status: 400 })
+    }
+
     const { data, error } = await supabase
       .from('usuarios')
-      .update({
-        nome,
-        email,
-        role,
-        funcao,
-        contrato_raiz,
-        status
-      })
-      .eq('matricula', matricula)
-      .select()
+      .update(updatePayload)
+      .eq('matricula', matriculaNumber)
+      .select('matricula, nome, email, telefone, phone, avatar_url, role, status, funcao')
       .single()
 
-    if (error) {
-      console.error('Erro ao atualizar usuário:', error)
-      return NextResponse.json({ error: 'Erro ao atualizar usuário' }, { status: 500 })
+    if (error || !data) {
+      return NextResponse.json({ success: false, message: 'Erro ao atualizar usuario' }, { status: 500 })
     }
 
-    return NextResponse.json({ message: 'Usuário atualizado com sucesso', user: data })
-   } catch (error) {
-     console.error('Erro ao atualizar usuário:', error)
-     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
-   }
- }
-
-// DELETE - Deletar usuário
-export async function DELETE(request: NextRequest, { params }: { params: Promise<{ matricula: string }> }) {
-  try {
-    const { user, error: authError } = await verifyAuth(request)
-    if (authError) {
-      return NextResponse.json({ error: authError }, { status: 401 })
-    }
-
-    const { matricula: matriculaStr } = await params
-    const matricula = parseInt(matriculaStr)
-
-    if (isNaN(matricula)) {
-      return NextResponse.json({ error: 'Matrícula inválida' }, { status: 400 })
-    }
-
-    // Verificar se o usuário tem permissão para deletar (apenas Admin)
-    if (user.role !== 'Admin') {
-      return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem deletar usuários.' }, { status: 403 })
-    }
-
-    // Verificar se o usuário não está tentando deletar a si mesmo
-    if (user.matricula === matricula) {
-      return NextResponse.json({ error: 'Você não pode deletar sua própria conta.' }, { status: 400 })
-    }
-
-    // Verificar se o usuário existe usando service role (bypass RLS)
-    const { data: existingUser, error: fetchError } = await supabaseAdmin
-      .from('usuarios')
-      .select('matricula, nome, email, status')
-      .eq('matricula', matricula)
-      .single()
-
-    if (fetchError || !existingUser) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 })
-    }
-
-    // Realizar exclusão em cascata: primeiro deletar sessões, depois o usuário
-    // Usar transação para garantir consistência
-    
-    // 1. Deletar todas as sessões relacionadas ao usuário
-    const { error: deleteSessionsError } = await supabaseAdmin
-      .from('sessoes')
-      .delete()
-      .eq('matricula_usuario', matricula)
-
-    if (deleteSessionsError) {
-      console.error('Erro ao deletar sessões do usuário:', deleteSessionsError)
-      return NextResponse.json({ error: 'Erro ao deletar sessões do usuário' }, { status: 500 })
-    }
-
-    // 2. Deletar o usuário após remover as dependências
-    const { error: deleteUserError } = await supabaseAdmin
-      .from('usuarios')
-      .delete()
-      .eq('matricula', matricula)
-
-    if (deleteUserError) {
-      console.error('Erro ao deletar usuário:', deleteUserError)
-      return NextResponse.json({ error: 'Erro ao deletar usuário' }, { status: 500 })
-    }
-
-    return NextResponse.json({ 
-      message: 'Usuário deletado com sucesso',
-      user: {
-        matricula: existingUser.matricula,
-        nome: existingUser.nome,
-        email: existingUser.email
-      }
-    })
+    return NextResponse.json({ success: true, user: data })
   } catch (error) {
-    console.error('Erro ao deletar usuário:', error)
-    return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 })
+    console.error('Erro no PUT /api/users/[matricula]:', error)
+    return NextResponse.json({ success: false, message: 'Erro interno do servidor' }, { status: 500 })
   }
 }
+

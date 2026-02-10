@@ -29,28 +29,18 @@ export function useVerification() {
   const [showTermsModal, setShowTermsModal] = useState(false)
   const [showDataModal, setShowDataModal] = useState(false)
 
-  // Verificar status do usuário
   const checkVerificationStatus = useCallback(async (): Promise<UserVerificationStatus | null> => {
     setIsLoading(true)
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) {
-        throw new Error('Token não encontrado')
-      }
-
-      const response = await fetch('/api/users/verification', {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      })
+      const response = await fetch('/api/users/verification')
 
       if (!response.ok) {
-        throw new Error('Erro ao verificar status do usuário')
+        throw new Error('Erro ao verificar status do usuÇ­rio')
       }
 
       const data = await response.json()
       if (!data.success) {
-        throw new Error(data.message || 'Erro na verificação')
+        throw new Error(data.message || 'Erro na verificaÇõÇœo')
       }
 
       const status: UserVerificationStatus = {
@@ -63,26 +53,19 @@ export function useVerification() {
       setVerificationStatus(status)
       return status
     } catch (error) {
-      console.error('Erro na verificação:', error)
+      console.error('Erro na verificaÇõÇœo:', error)
       return null
     } finally {
       setIsLoading(false)
     }
   }, [])
 
-  // Aceitar termos
   const acceptTerms = useCallback(async (): Promise<boolean> => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) {
-        throw new Error('Token não encontrado')
-      }
-
       const response = await fetch('/api/users/terms', {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({ accepted: true })
       })
@@ -96,7 +79,6 @@ export function useVerification() {
         throw new Error(data.message || 'Erro ao aceitar termos')
       }
 
-      // Atualizar status local
       if (verificationStatus) {
         setVerificationStatus({
           ...verificationStatus,
@@ -116,29 +98,17 @@ export function useVerification() {
     }
   }, [verificationStatus])
 
-  // Recusar termos (fazer logout)
   const declineTerms = useCallback(() => {
-    // Limpar dados de autenticação
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('user')
-    
-    // Recarregar página para forçar redirect para login
+    void fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined)
     window.location.href = '/login'
   }, [])
 
-  // Atualizar dados do usuário
   const updateUserData = useCallback(async (data: UserDataUpdate): Promise<boolean> => {
     try {
-      const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      if (!token) {
-        throw new Error('Token não encontrado')
-      }
-
       const response = await fetch('/api/users/profile/update', {
         method: 'PUT',
         headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify(data)
       })
@@ -152,14 +122,12 @@ export function useVerification() {
         throw new Error(responseData.message || 'Erro ao atualizar dados')
       }
 
-      // Atualizar status local
       if (verificationStatus) {
         const updatedUserData = {
           ...verificationStatus.userData,
           ...data
         }
 
-        // Recalcular campos faltantes
         const missingFields: string[] = []
         if (!updatedUserData.phone) missingFields.push('phone')
         if (!updatedUserData.letra_id) missingFields.push('letra_id')
@@ -181,54 +149,33 @@ export function useVerification() {
     }
   }, [verificationStatus])
 
-  // Iniciar processo de verificação
   const startVerification = useCallback(async (): Promise<boolean> => {
-    console.log('startVerification: Iniciando verificação...')
     const status = await checkVerificationStatus()
-    console.log('startVerification: Status recebido:', status)
     if (!status) return false
 
-    // Se termos não foram aceitos, mostrar modal de termos
     if (!status.termsAccepted) {
-      console.log('startVerification: Termos não aceitos, abrindo modal de termos')
       setShowTermsModal(true)
       return false
     }
 
-    // VERIFICAÇÃO DE DADOS OBRIGATÓRIOS DESABILITADA
-    // if (!status.hasRequiredData) {
-    //   console.log('startVerification: Dados faltantes:', status.missingFields, 'abrindo modal de dados')
-    //   setShowDataModal(true)
-    //   return false
-    // }
-
-    // Tudo OK, usuário pode usar o sistema
-    console.log('startVerification: Verificação completa, usuário pode usar o sistema')
     return true
   }, [checkVerificationStatus])
 
-  // Verificar se verificação está completa
   const isVerificationComplete = useCallback((): boolean => {
-    // Apenas verificar se os termos foram aceitos (dados obrigatórios desabilitados)
     return verificationStatus?.termsAccepted === true
   }, [verificationStatus])
 
   return {
-    // Estados
     isLoading,
     verificationStatus,
     showTermsModal,
     showDataModal,
-    
-    // Ações
     checkVerificationStatus,
     startVerification,
     acceptTerms,
     declineTerms,
     updateUserData,
     isVerificationComplete,
-    
-    // Controles de modal
     setShowTermsModal,
     setShowDataModal
   }

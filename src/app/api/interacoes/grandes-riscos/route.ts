@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
 
 // Configuração do Supabase com Service Role Key para bypass do RLS
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const JWT_SECRET = process.env.JWT_SECRET!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   auth: {
@@ -14,30 +13,22 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
   }
 })
 
-// Função para verificar o token JWT e obter o usuário
-function verifyToken(token: string): { contrato_raiz: string; matricula: string } | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as { contrato_raiz: string; matricula: string }
-  } catch {
-    return null
-  }
-}
+const AUTH_ERROR = { error: 'Token de acesso requerido' }
 
 // GET /api/interacoes/grandes-riscos - Listar grandes riscos
 export async function GET(request: NextRequest) {
   try {
     // Verificar autenticação
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Token de autorização necessário' },
-        { status: 401 }
-      )
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json(AUTH_ERROR, { status: 401 })
+    }
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    if (!decoded || !decoded.contrato_raiz) {
+    if (!token || !user.contrato_raiz) {
       return NextResponse.json(
         { error: 'Token inválido ou contrato_raiz não encontrado' },
         { status: 401 }
@@ -49,7 +40,7 @@ export async function GET(request: NextRequest) {
     const contratoId = searchParams.get('contrato_id')
 
     // Usar contrato_id da query string se fornecido, senão usar contrato_raiz do token
-    const contratoFiltro = contratoId || decoded.contrato_raiz
+    const contratoFiltro = contratoId || user.contrato_raiz
 
     let query = supabase
       .from('interacao_grandes_riscos')
@@ -129,9 +120,9 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('interacao_grandes_riscos')
-      .insert({ 
-        grandes_riscos: grandes_riscos, 
-        contrato_id: decoded.contrato_raiz 
+      .insert({
+        grandes_riscos: grandes_riscos,
+        contrato_id: decoded.contrato_raiz
       })
       .select()
       .single()

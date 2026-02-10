@@ -30,6 +30,7 @@ interface FormData {
   riscoassociado_id: string
   ver_agir: boolean
   gerou_recusa: boolean
+  acao: string
 }
 
 interface Natureza {
@@ -117,9 +118,9 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
   const [potenciais, setPotenciais] = useState<Potenciais[]>([])
   const [riscosAssociados, setRiscosAssociados] = useState<RiscoAssociado[]>([])
   const [images, setImages] = useState<ImageFile[]>([])  
-  const [desvioId, setDesvioId] = useState<string | null>(null) // 🆔 ID do desvio cadastrado
+  const [desvioId, setDesvioId] = useState<string | null>(null) // ðŸ†” ID do desvio cadastrado
   
-  // 💾 SISTEMA DE BACKUP DAS IMAGENS EM LOCALSTORAGE
+  // ðŸ’¾ SISTEMA DE BACKUP DAS IMAGENS EM LOCALSTORAGE
   const BACKUP_KEY = 'desvio_images_backup'
   
   const saveImagesToBackup = useCallback((imagesToSave: ImageFile[]) => {
@@ -132,16 +133,16 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
           fileType: img.file.type,
           preview: img.preview,
           categoria: img.categoria,
-          // Não salvamos o File object pois não é serializável
+          // NÃ£o salvamos o File object pois nÃ£o Ã© serializÃ¡vel
         }))
       }
       localStorage.setItem(BACKUP_KEY, JSON.stringify(backupData))
-      console.log('💾 ✅ BACKUP SALVO:', {
+      console.log('BACKUP SALVO:', {
         quantidade: imagesToSave.length,
         timestamp: backupData.timestamp
       })
     } catch (error) {
-      console.error('💾 ❌ Erro ao salvar backup:', error)
+      console.error('Erro ao salvar backup:', error)
     }
   }, [])
   
@@ -150,15 +151,15 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
   const clearImagesBackup = () => {
     try {
       localStorage.removeItem(BACKUP_KEY)
-      console.log('💾 🧹 BACKUP LIMPO')
+      console.log('BACKUP LIMPO')
     } catch (error) {
-      console.error('💾 ❌ Erro ao limpar backup:', error)
+      console.error('Erro ao limpar backup:', error)
     }
   }
 
-  // 🔍 WRAPPER PARA DETECTAR MUDANÇAS NO ESTADO DAS IMAGENS COM BACKUP
+  // ðŸ” WRAPPER PARA DETECTAR MUDANÃ‡AS NO ESTADO DAS IMAGENS COM BACKUP
   const setImagesWithLog = useCallback((newImages: ImageFile[] | ((prev: ImageFile[]) => ImageFile[])) => {
-    console.log('🔍 ===== SETIMAGES CHAMADO =====', {
+    console.log('ðŸ” ===== SETIMAGES CHAMADO =====', {
       timestamp: new Date().toISOString(),
       tipoParametro: typeof newImages === 'function' ? 'function' : 'array',
       estadoAtual: images.length,
@@ -168,42 +169,42 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     if (typeof newImages === 'function') {
       setImages(prev => {
         const resultado = newImages(prev)
-        console.log('🔍 ✅ SETIMAGES EXECUTADO (FUNCTION):', {
+        console.log('SETIMAGES EXECUTADO (FUNCTION):', {
           estadoAnterior: prev.length,
           novoEstado: resultado.length,
           diferenca: resultado.length - prev.length
         })
         
-        // 💾 BACKUP AUTOMÁTICO APÓS MUDANÇA
+        // ðŸ’¾ BACKUP AUTOMÃTICO APÃ“S MUDANÃ‡A
         if (resultado.length > 0) {
           saveImagesToBackup(resultado)
         } else if (prev.length > 0) {
-          // Se estava com imagens e agora está vazio, manter backup por segurança
-          console.log('⚠️ IMAGENS FORAM LIMPAS - MANTENDO BACKUP POR SEGURANÇA')
+          // Se estava com imagens e agora estÃ¡ vazio, manter backup por seguranÃ§a
+          console.log('IMAGENS FORAM LIMPAS - MANTENDO BACKUP POR SEGURANÃ‡A')
         }
         
         return resultado
       })
     } else {
-      console.log('🔍 ✅ SETIMAGES EXECUTADO (ARRAY):', {
+      console.log('SETIMAGES EXECUTADO (ARRAY):', {
         estadoAnterior: images.length,
         novoEstado: newImages.length,
         diferenca: newImages.length - images.length
       })
       
-      // 💾 BACKUP AUTOMÁTICO APÓS MUDANÇA
+      // ðŸ’¾ BACKUP AUTOMÃTICO APÃ“S MUDANÃ‡A
       if (newImages.length > 0) {
         saveImagesToBackup(newImages)
       } else if (images.length > 0) {
-        // Se estava com imagens e agora está vazio, manter backup por segurança
-        console.log('⚠️ IMAGENS FORAM LIMPAS - MANTENDO BACKUP POR SEGURANÇA')
+        // Se estava com imagens e agora estÃ¡ vazio, manter backup por seguranÃ§a
+        console.log('IMAGENS FORAM LIMPAS - MANTENDO BACKUP POR SEGURANÃ‡A')
       }
       
       setImages(newImages)
     }
   }, [images, saveImagesToBackup])
   
-  // 🛡️ VERIFICAÇÃO DE INTEGRIDADE DAS IMAGENS
+  // ðŸ›¡ï¸ VERIFICAÃ‡ÃƒO DE INTEGRIDADE DAS IMAGENS
   const checkImageIntegrity = useCallback(() => {
     const backupStr = typeof window !== 'undefined' ? localStorage.getItem(BACKUP_KEY) : null
     if (!backupStr) return
@@ -214,7 +215,7 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       const currentCount = images.length
       
       if (backupCount > 0 && currentCount === 0) {
-        console.log('🚨 PERDA DE IMAGENS DETECTADA!', {
+        console.log('PERDA DE IMAGENS DETECTADA!', {
           imagensNoBackup: backupCount,
           imagensAtuais: currentCount,
           timestampBackup: backupData.timestamp,
@@ -229,59 +230,49 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
         })
         
         // Alertar sobre a perda
-        console.error('🚨 CRÍTICO: Imagens foram perdidas durante o processo!')
+        console.error('Imagens foram perdidas durante o processo!')
       }
     } catch (error) {
-      console.error('🛡️ Erro na verificação de integridade:', error)
+      console.error('Erro na verificaÃ§Ã£o de integridade:', error)
     }
   }, [images.length])
 
-  // 🆔 FUNÇÃO PARA CADASTRAR O DESVIO ANTECIPADAMENTE
+  // FUNCAO PARA CADASTRAR O DESVIO ANTECIPADAMENTE
   const cadastrarDesvioAntecipado = async () => {
-    try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      
-      const desvioData = {
-        descricao: formData.descricao,
-        local: formData.local,
-        data_ocorrencia: new Date().toISOString().split('T')[0],
-        natureza_id: parseInt(formData.natureza_id),
-        tipo_id: parseInt(formData.tipo_id),
-        potencial: formData.potencial,
-        potencial_local: formData.potencial_local,
-        contrato: formData.contrato,
-        riscoassociado_id: parseInt(formData.riscoassociado_id),
-        ver_agir: formData.ver_agir,
-        gerou_recusa: formData.gerou_recusa
-      }
-      
-      console.log('🆔 Cadastrando desvio antecipadamente:', desvioData)
-      
-      const response = await fetch('/api/desvios', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${auth_token}`
-        },
-        body: JSON.stringify(desvioData)
-      })
-      
-      if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(`Erro ao cadastrar desvio: ${errorData.message || response.statusText}`)
-      }
-      
-      const result = await response.json()
-      console.log('✅ Desvio cadastrado com sucesso! ID:', result.data.id)
-      
-      // Armazenar o ID do desvio
-      setDesvioId(result.data.id)
-      
-      return result.data.id
-    } catch (error) {
-      console.error('❌ Erro ao cadastrar desvio antecipadamente:', error)
-      throw error
+    const desvioData = {
+      descricao: formData.descricao,
+      local: formData.local,
+      data_ocorrencia: new Date().toISOString().split('T')[0],
+      natureza_id: parseInt(formData.natureza_id),
+      tipo_id: parseInt(formData.tipo_id),
+      potencial: formData.potencial,
+      potencial_local: formData.potencial_local,
+      contrato: formData.contrato,
+      riscoassociado_id: parseInt(formData.riscoassociado_id),
+      ver_agir: formData.ver_agir,
+      gerou_recusa: formData.gerou_recusa,
+      acao: formData.acao || null
     }
+    
+    console.log('Cadastrando desvio antecipadamente:', desvioData)
+    
+    const response = await fetch('/api/desvios', {
+      method: 'POST',
+      body: JSON.stringify(desvioData)
+    })
+    
+    if (!response.ok) {
+      const errorData = await response.json()
+      throw new Error(`Erro ao cadastrar desvio: ${errorData.message || response.statusText}`)
+    }
+    
+    const result = await response.json()
+    console.log('Desvio cadastrado com sucesso! ID:', result.data.id)
+    
+    // Armazenar o ID do desvio
+    setDesvioId(result.data.id)
+    
+    return result.data.id
   }
   const [userInput, setUserInput] = useState('')
   const [showInput, setShowInput] = useState(false)
@@ -300,17 +291,18 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     contrato: user?.contrato_raiz || '',
     riscoassociado_id: '1',
     ver_agir: false,
-    gerou_recusa: false
+    gerou_recusa: false,
+    acao: ''
   })
 
   const questions: Question[] = useMemo(() => [
     {
       id: 'greeting',
-      text: `Olá ${user?.nome || 'usuário'}! 👋 Vou te ajudar a registrar um novo desvio. Vamos começar?`,
+      text: `Olá, ${user?.nome || 'usuário'}! Vou te ajudar a registrar um novo desvio. Vamos começar?`,
       field: '',
       type: 'button',
       required: false,
-      buttonText: 'Vamos começar! 🚀'
+      buttonText: 'Vamos começar!'
     },
     {
       id: 'descricao',
@@ -347,7 +339,7 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     },
     {
       id: 'tipo',
-      text: 'Agora me diga qual é o tipo específico:',
+      text: 'Agora me diga qual é o tipo especí­fico:',
       field: 'tipo_id',
       type: 'select',
       required: true
@@ -368,14 +360,22 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     },
     {
       id: 'ver_agir',
-      text: 'Este desvio requer ação imediata (Ver & Agir)?',
+      text: 'Este desvio foi resolvido de forma imediata (Ver & Agir)?',
       field: 'ver_agir',
       type: 'radio',
       options: [
-        { value: 'true', label: '⚡ Sim, requer ação imediata' },
-        { value: 'false', label: '⏳ Não, pode aguardar processo normal' }
+        { value: 'true', label: 'Sim, foi resolvido imediatamente' },
+        { value: 'false', label: 'Não, deve passar pelo processo padrão' }
       ],
       required: true
+    },
+    {
+      id: 'acao_ver_agir',
+      text: 'Qual ação foi realizada?',
+      field: 'acao',
+      type: 'textarea',
+      required: true,
+      validation: (value) => (value as string).trim().length >= 5
     },
     {
       id: 'gerou_recusa',
@@ -383,8 +383,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       field: 'gerou_recusa',
       type: 'radio',
       options: [
-        { value: 'true', label: '✅ Sim, gerou recusa' },
-        { value: 'false', label: '❌ Não, não gerou recusa' }
+        { value: 'true', label: 'Sim, gerou recusa' },
+        { value: 'false', label: 'Não, não gerou recusa' }
       ],
       required: true
     },
@@ -420,7 +420,7 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
 
     setMessages(prev => [...prev, newMessage])
 
-    // Simular digitação
+    // Simular digitaÃ§Ã£o
     for (let i = 0; i <= text.length; i++) {
       await new Promise(resolve => setTimeout(resolve, TYPING_SPEED))
       
@@ -463,14 +463,13 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     }, 500)
   }, [typeMessage, questions])
 
-  // Funções de carregamento de dados
+  // FunÃ§Ãµes de carregamento de dados
   const loadNaturezas = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      const response = await fetch('/api/security-params/natures', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+      const contrato = user?.contrato_raiz
+      if (!contrato) return
+      const response = await fetch(`/api/security-params/natures?contrato=${encodeURIComponent(contrato)}`, {
+       method: 'GET'
       })
       
       if (response.ok) {
@@ -480,15 +479,16 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     } catch (error) {
       console.error('Error loading naturezas:', error)
     }
-  }, [])
+  }, [user?.contrato_raiz])
 
   const loadTipos = useCallback(async (naturezaId: string) => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      const response = await fetch(`/api/security-params/types?nature_id=${naturezaId}`, {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+      const contrato = user?.contrato_raiz
+      if (!contrato) return
+      const response = await fetch(
+        `/api/security-params/types?nature_id=${naturezaId}&contrato=${encodeURIComponent(contrato)}`,
+        {
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -498,15 +498,14 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     } catch (error) {
       console.error('Error loading tipos:', error)
     }
-  }, [])
+  }, [user?.contrato_raiz])
 
   const loadPotenciais = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      const response = await fetch('/api/security-params/potentials', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+      const contrato = user?.contrato_raiz
+      if (!contrato) return
+      const response = await fetch(`/api/security-params/potentials?contrato=${encodeURIComponent(contrato)}`, {
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -516,15 +515,12 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     } catch (error) {
       console.error('Error loading potenciais:', error)
     }
-  }, [])
+  }, [user?.contrato_raiz])
 
   const loadRiscosAssociados = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
       const response = await fetch('/api/security-params/associated-risks', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -538,11 +534,10 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
 
   const loadLocais = useCallback(async () => {
     try {
-      const auth_token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-      const response = await fetch('/api/security-params/locations', {
-        headers: {
-          'Authorization': `Bearer ${auth_token}`
-        }
+      const contrato = user?.contrato_raiz
+      if (!contrato) return
+      const response = await fetch(`/api/security-params/locations?contrato=${encodeURIComponent(contrato)}&limit=500`, {
+        method: 'GET'
       })
       
       if (response.ok) {
@@ -552,11 +547,11 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     } catch (error) {
       console.error('Error loading locais:', error)
     }
-  }, [])
+  }, [user?.contrato_raiz])
 
   const resetForm = useCallback(() => {
-    // 🧹 LOG DO RESET DO FORMULÁRIO
-    console.log('🧹 ===== RESETFORM CHAMADO (NOVA ABORDAGEM) =====', {
+    // ðŸ§¹ LOG DO RESET DO FORMULÃRIO
+    console.log('ðŸ§¹ ===== RESETFORM CHAMADO (NOVA ABORDAGEM) =====', {
       timestamp: new Date().toISOString(),
       desvioIdAntes: desvioId,
       quantidadeImagens: images.length
@@ -581,13 +576,13 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       contrato: user?.contrato_raiz || '',
       riscoassociado_id: '1',
       ver_agir: false,
-      gerou_recusa: false
+      gerou_recusa: false,
+      acao: ''
     })
     
-    // 💾 LIMPAR BACKUP APENAS QUANDO APROPRIADO
+    // ðŸ’¾ LIMPAR BACKUP APENAS QUANDO APROPRIADO
     clearImagesBackup()
     
-    console.log('🧹 ✅ RESETFORM CONCLUÍDO - Estado completamente limpo')
   }, [user?.contrato_raiz]) // eslint-disable-line react-hooks/exhaustive-deps
 
 
@@ -601,7 +596,7 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       loadRiscosAssociados()
       startConversation()
     }
-    // Removido resetForm() quando fecha para preservar estado das imagens durante submissão
+    // Removido resetForm() quando fecha para preservar estado das imagens durante submissÃ£o
   }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
@@ -616,7 +611,7 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     scrollToBottom()
   }, [messages])
 
-  // Scroll automático quando showInput muda
+  // Scroll automÃ¡tico quando showInput muda
   useEffect(() => {
     if (showInput) {
       setTimeout(() => {
@@ -625,55 +620,35 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     }
   }, [showInput])
   
-  // 🔍 MONITOR DE MUDANÇAS NO ESTADO DAS IMAGENS COM PROTEÇÃO AUTOMÁTICA
-  useEffect(() => {
-    console.log('🔍 📸 ===== MUDANÇA NO ESTADO DAS IMAGENS =====', {
-      timestamp: new Date().toISOString(),
-      quantidadeImagens: images.length,
-      detalhesImagens: images.map((img, idx) => ({
-        index: idx,
-        fileName: img.file.name,
-        categoria: img.categoria,
-        temPreview: !!img.preview,
-        temUrl: !!(img as ImageFile & { url?: string }).url,
-        fileSize: img.file.size,
-        preview: img.preview?.substring(0, 30) + '...'
-      })),
-      contexto: {
-        modalAberto: isOpen,
-        perguntaAtual: currentQuestionIndex,
-        carregando: loading,
-        digitando: isTyping
-      }
-    })
-    
-    // 💾 Salvar backup sempre que houver mudança
+  // ðŸ” MONITOR DE MUDANÃ‡AS NO ESTADO DAS IMAGENS COM PROTEÃ‡ÃƒO AUTOMÃTICA
+  useEffect(() => { 
+    // ðŸ’¾ Salvar backup sempre que houver mudanÃ§a
     if (images.length > 0) {
       saveImagesToBackup(images)
     }
     
-    // 🛡️ PROTEÇÃO AUTOMÁTICA CONTRA PERDA DE IMAGENS
+    // ðŸ›¡ï¸ PROTEÃ‡ÃƒO AUTOMÃTICA CONTRA PERDA DE IMAGENS
     if (images.length === 0 && !loading && !isTyping) {
-      // Verificar se há backup disponível
+      // Verificar se hÃ¡ backup disponÃ­vel
       const backupStr = typeof window !== 'undefined' ? localStorage.getItem(BACKUP_KEY) : null
       if (backupStr) {
         try {
           const backupData = JSON.parse(backupStr)
           if (backupData.images && backupData.images.length > 0) {
-            console.log('🛡️ DETECTADA PERDA DE IMAGENS - Verificando se é perda legítima ou erro')
+            console.log('ðŸ›¡ï¸ DETECTADA PERDA DE IMAGENS - Verificando se Ã© perda legÃ­tima ou erro')
             
-            // Se não estamos no início da conversa e havia imagens no backup, pode ser perda
+            // Se nÃ£o estamos no inÃ­cio da conversa e havia imagens no backup, pode ser perda
             if (currentQuestionIndex > 0) {
-              console.warn('⚠️ POSSÍVEL PERDA DE IMAGENS DETECTADA - Backup disponível com', backupData.images.length, 'imagens')
+              console.warn('âš ï¸ POSSÃVEL PERDA DE IMAGENS DETECTADA - Backup disponÃ­vel com', backupData.images.length, 'imagens')
             }
           }
         } catch (error) {
-          console.error('🛡️ Erro ao verificar backup:', error)
+          console.error('ðŸ›¡ï¸ Erro ao verificar backup:', error)
         }
       }
     }
     
-    // 🛡️ VERIFICAÇÃO AUTOMÁTICA DE INTEGRIDADE A CADA MUDANÇA
+    // ðŸ›¡ï¸ VERIFICAÃ‡ÃƒO AUTOMÃTICA DE INTEGRIDADE A CADA MUDANÃ‡A
     if (isOpen && !loading) {
       setTimeout(() => checkImageIntegrity(), 100)
     }
@@ -708,8 +683,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
   const handleUserResponse = async (value: string | number | boolean) => {
     const currentQuestion = questions[currentQuestionIndex]
     
-    // 🔍 LOG DO ESTADO DAS IMAGENS EM CADA RESPOSTA
-    console.log('🔍 ===== HANDLEUSERRESPONSE =====', {
+    // ðŸ” LOG DO ESTADO DAS IMAGENS EM CADA RESPOSTA
+    console.log('ðŸ” ===== HANDLEUSERRESPONSE =====', {
       perguntaAtual: currentQuestion.id,
       perguntaTexto: currentQuestion.text,
       valorResposta: value,
@@ -724,7 +699,7 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       }
     })
     
-    // Validar resposta se necessário
+    // Validar resposta se necessÃ¡rio
     if (currentQuestion.required && (typeof value === 'string' ? !value.trim() : !value)) {
       toast.error('Esta informação é obrigatória')
       return
@@ -735,12 +710,28 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       return
     }
 
-    // Adicionar resposta do usuário
-    addUserMessage(String(value))
+    // Adicionar resposta do usuÃ¡rio (mostrar label quando for select de natureza/tipo)
+    const valueAsString = String(value)
+    let displayValue = valueAsString
+    if (currentQuestion.field === 'natureza_id') {
+      const naturezaSelecionada = naturezas.find(n => String(n.id) === valueAsString)
+      if (naturezaSelecionada) displayValue = naturezaSelecionada.natureza
+    } else if (currentQuestion.field === 'tipo_id') {
+      const tipoSelecionado = tipos.find(t => String(t.id) === valueAsString)
+      if (tipoSelecionado) displayValue = tipoSelecionado.tipo
+    } else if (currentQuestion.field === 'riscoassociado_id') {
+      const riscoSelecionado = riscosAssociados.find(r => String(r.id) === valueAsString)
+      if (riscoSelecionado) displayValue = riscoSelecionado.risco_associado
+    } else if (currentQuestion.options && currentQuestion.options.length > 0) {
+      const optionSelecionada = currentQuestion.options.find(opt => opt.value === valueAsString)
+      if (optionSelecionada) displayValue = optionSelecionada.label
+    }
+
+    addUserMessage(displayValue)
     setUserInput('')
     setShowInput(false)
 
-    // Atualizar dados do formulário
+    // Atualizar dados do formulÃ¡rio
     if (currentQuestion.field !== 'images' && currentQuestion.field !== '') {
       let processedValue: unknown = value
       
@@ -753,12 +744,12 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
           // Se confirmou que foi hoje, usar a data atual
           processedValue = new Date().toISOString().split('T')[0]
         } else {
-          // Se não foi hoje, por simplicidade vamos usar a data atual (pode ser melhorado com date picker)
+          // Se nÃ£o foi hoje, por simplicidade vamos usar a data atual (pode ser melhorado com date picker)
           processedValue = new Date().toISOString().split('T')[0]
         }
       }
       
-      // Lógica especial para potencial_local
+      // LÃ³gica especial para potencial_local
       if (currentQuestion.field === 'potencial_local') {
         const potencialSelecionado = potenciais.find(p => p.potencial_local === value)
         if (potencialSelecionado) {
@@ -776,27 +767,54 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       }
     }
 
-    // 🆔 CADASTRAR DESVIO APÓS RESPONDER 'GEROU_RECUSA' E ANTES DA PERGUNTA DE IMAGENS
+    if (currentQuestion.id === 'ver_agir') {
+      const isVerAgir = value === 'true' || value === true
+      setTimeout(() => {
+        if (currentQuestionIndex < questions.length - 1) {
+          if (isVerAgir) {
+            nextQuestion()
+            return
+          }
+          const nextIndex = currentQuestionIndex + 2
+          setCurrentQuestionIndex(nextIndex)
+          if (nextIndex < questions.length) {
+            const nextQuestion = questions[nextIndex]
+            setTimeout(() => {
+              typeMessage(nextQuestion.text, 'bot', () => {
+                setShowInput(true)
+                setTimeout(() => {
+                  scrollToBottom()
+                }, 100)
+              })
+            }, 500)
+          } else {
+            finishConversation()
+          }
+        } else {
+          finishConversation()
+        }
+      }, PAUSE_BETWEEN_MESSAGES)
+      return
+    }
     if (currentQuestion.id === 'gerou_recusa') {
       setTimeout(async () => {
         try {
-          // Cadastrar o desvio imediatamente após responder 'gerou_recusa'
+          // Cadastrar o desvio imediatamente apÃ³s responder 'gerou_recusa'
           await cadastrarDesvioAntecipado()
           
-          // Continuar para a próxima pergunta (imagens)
+          // Continuar para a prÃ³xima pergunta (imagens)
           if (currentQuestionIndex < questions.length - 1) {
             nextQuestion()
           } else {
             finishConversation()
           }
-        } catch (error) {
-          console.error('❌ Erro ao cadastrar desvio após gerou_recusa:', error)
+        } catch {
           toast.error('Erro ao processar desvio. Tente novamente.')
           setLoading(false)
         }
       }, PAUSE_BETWEEN_MESSAGES)
     } else {
-      // Próxima pergunta ou finalizar (fluxo normal para outras perguntas)
+      // PrÃ³xima pergunta ou finalizar (fluxo normal para outras perguntas)
       setTimeout(() => {
         if (currentQuestionIndex < questions.length - 1) {
           nextQuestion()
@@ -811,8 +829,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     const nextIndex = currentQuestionIndex + 1
     setCurrentQuestionIndex(nextIndex)
     
-    // 🔄 LOG DO ESTADO DAS IMAGENS AO AVANÇAR PERGUNTA
-    console.log('🔄 ===== NEXTQUESTION =====', {
+    // ðŸ”„ LOG DO ESTADO DAS IMAGENS AO AVANÃ‡AR PERGUNTA
+    console.log('ðŸ”„ ===== NEXTQUESTION =====', {
       perguntaAnterior: currentQuestionIndex,
       proximaPergunta: nextIndex,
       estadoImagens: {
@@ -843,8 +861,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
 
 
   const finishConversation = async () => {
-    // 🏁 LOG SIMPLIFICADO DO ESTADO AO FINALIZAR CONVERSA
-    console.log('🏁 ===== FINISHCONVERSATION CHAMADA (NOVA ABORDAGEM) =====', {
+    // ðŸ LOG SIMPLIFICADO DO ESTADO AO FINALIZAR CONVERSA
+    console.log('ðŸ ===== FINISHCONVERSATION CHAMADA (NOVA ABORDAGEM) =====', {
       timestamp: new Date().toISOString(),
       desvioId: desvioId,
       desvioJaCadastrado: !!desvioId,
@@ -852,9 +870,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       imagensJaCadastradas: images.filter(img => (img as ImageFile & { cadastrada?: boolean }).cadastrada).length
     })
     
-    // O desvio já deve ter sido cadastrado após a pergunta 'gerou_recusa'
+    // O desvio jÃ¡ deve ter sido cadastrado apÃ³s a pergunta 'gerou_recusa'
     if (!desvioId) {
-      console.error('❌ ERRO CRÍTICO: Desvio deveria ter sido cadastrado após gerou_recusa!')
       toast.error('Erro interno: Desvio não foi cadastrado corretamente.')
       setLoading(false)
       return
@@ -869,8 +886,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     try {
       setLoading(true)
       
-      // 🚀 LOG DO HANDLESUBMIT SIMPLIFICADO
-      console.log('🚀 ===== HANDLESUBMIT EXECUTADO (NOVA ABORDAGEM) =====', {
+      // ðŸš€ LOG DO HANDLESUBMIT SIMPLIFICADO
+      console.log('ðŸš€ ===== HANDLESUBMIT EXECUTADO (NOVA ABORDAGEM) =====', {
         timestamp: new Date().toISOString(),
         desvioId: desvioId,
         desvioJaCadastrado: !!desvioId,
@@ -878,19 +895,16 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
         imagensJaCadastradas: images.filter(img => (img as ImageFile & { cadastrada?: boolean }).cadastrada).length
       })
       
-      // ✅ VERIFICAR SE O DESVIO JÁ FOI CADASTRADO
+      // âœ… VERIFICAR SE O DESVIO JÃ FOI CADASTRADO
       if (!desvioId) {
-        console.error('❌ ERRO: Desvio não foi cadastrado ainda!')
         throw new Error('Erro interno: Desvio não foi cadastrado')
       }
-      
-      console.log('✅ Desvio já cadastrado com ID:', desvioId)
-      console.log('✅ Imagens já processadas:', images.length)
 
-      typeMessage('✅ Relato criado com sucesso! Obrigado por contribuir com a segurança.', 'bot', () => {
+
+      typeMessage('Relato criado com sucesso! Obrigado por contribuir com a segurança.', 'bot', () => {
         setTimeout(() => {
           toast.success('Desvio criado com sucesso!')
-          // Reset do formulário apenas após cadastro completo (desvio + imagens)
+          // Reset do formulÃ¡rio apenas apÃ³s cadastro completo (desvio + imagens)
           resetForm()
           onSuccess?.()
           onClose()
@@ -899,7 +913,7 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       
     } catch (error) {
       console.error('Error creating desvio:', error)
-      typeMessage('❌ Ops! Ocorreu um erro ao criar o relato. Tente novamente.', 'bot')
+      typeMessage('Ops! Ocorreu um erro ao criar o relato. Tente novamente.', 'bot')
       toast.error('Erro ao criar desvio')
     } finally {
       setLoading(false)
@@ -911,13 +925,6 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
     if (files.length === 0) return
-
-    console.log('📸 🔄 INICIANDO UPLOAD DE IMAGENS (APENAS UPLOAD E ARMAZENAMENTO LOCAL):', {
-      timestamp: new Date().toISOString(),
-      quantidadeArquivos: files.length,
-      arquivos: files.map(f => ({ name: f.name, size: f.size, type: f.type }))
-    })
-
     // Processar cada imagem - APENAS UPLOAD E ARMAZENAMENTO NO ESTADO LOCAL
     for (const file of files) {
       try {
@@ -925,18 +932,8 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
         const uploadFormData = new FormData()
         uploadFormData.append('file', file)
         
-        // Recuperar token de autenticação
-        const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
-        if (!token) {
-          toast.error('Token de autenticação não encontrado')
-          continue
-        }
-        
         const uploadResponse = await fetch('/api/desvios/upload-image', {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`
-          },
           body: uploadFormData
         })
         
@@ -951,9 +948,9 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
         if (uploadResult.success) {
           const imageUrl = uploadResult.data.publicUrl
           
-          // 🆔 VERIFICAR SE TEMOS O ID DO DESVIO
+          // ðŸ†” VERIFICAR SE TEMOS O ID DO DESVIO
           if (!desvioId) {
-            console.error('❌ ERRO: desvioId não encontrado! Não é possível cadastrar a imagem.')
+            console.error('ERRO: desvioId não encontrado! Não é possÃ­vel cadastrar a imagem.')
             toast.error('Erro: Desvio não foi cadastrado ainda. Tente novamente.')
             continue
           }
@@ -966,14 +963,10 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
               categoria: 'evidencia'
             }
             
-            console.log('📸 🆔 CADASTRANDO IMAGEM NA TABELA:', imagemData)
+            console.log('ðŸ“¸ ðŸ†” CADASTRANDO IMAGEM NA TABELA:', imagemData)
             
             const cadastroResponse = await fetch('/api/desvios/imagens', {
               method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-              },
               body: JSON.stringify(imagemData)
             })
             
@@ -983,16 +976,10 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
             }
             
             const cadastroResult = await cadastroResponse.json()
-            console.log('📸 ✅ IMAGEM CADASTRADA COM SUCESSO:', cadastroResult)
+            console.log('IMAGEM CADASTRADA COM SUCESSO:', cadastroResult)
             
             // 3. Armazenar no estado local apenas para preview
-            console.log('📸 ✅ ADICIONANDO IMAGEM AO ESTADO LOCAL (APENAS PREVIEW):', {
-              fileName: file.name,
-              imageUrl: imageUrl,
-              categoria: 'evidencia',
-              desvioId: desvioId,
-              estadoAtualAntes: images.length
-            })
+           
             
             setImagesWithLog(prev => {
               const novoEstado = [...prev, { 
@@ -1000,10 +987,10 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
                 preview: imageUrl, // URL da imagem para preview
                 categoria: 'evidencia' as const,
                 url: imageUrl, // URL armazenada
-                cadastrada: true // Marca que já foi cadastrada
+                cadastrada: true // Marca que jÃ¡ foi cadastrada
               }]
               
-              console.log('📸 ✅ IMAGEM PROCESSADA COMPLETAMENTE:', {
+              console.log('IMAGEM PROCESSADA COMPLETAMENTE:', {
                 fileName: file.name,
                 estadoAnterior: prev.length,
                 novoEstado: novoEstado.length,
@@ -1016,7 +1003,7 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
             
             toast.success(`${file.name} enviada e cadastrada com sucesso!`)
           } catch (error) {
-            console.error('❌ Erro ao cadastrar imagem na tabela:', error)
+            console.error('Erro ao cadastrar imagem na tabela:', error)
             toast.error(`Erro ao cadastrar ${file.name}. Tente novamente.`)
             continue
           }
@@ -1082,19 +1069,69 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
           riscosAssociados.map(r => ({ value: r.id, label: r.risco_associado })) :
           currentQuestion.options || []
 
-        console.log('🔍 Opções disponíveis para', currentQuestion.field, ':', options)
+        console.log('ðŸ” OpÃ§Ãµes disponÃ­veis para', currentQuestion.field, ':', options)
 
         if (options.length === 0) {
           return (
             <div className="text-center py-4">
-              <p className="text-gray-500 dark:text-gray-400">Carregando opções...</p>
+              <p className="text-gray-500 dark:text-gray-400">Carregando opÃ§Ãµes...</p>
+            </div>
+          )
+        }
+
+        const sortedOptions = currentQuestion.field === 'local'
+          ? [...options].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' }))
+          : options
+
+        if (currentQuestion.field === 'local') {
+          return (
+            <div className="space-y-2">
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleUserResponse(e.target.value)
+                  }
+                }}
+                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="" disabled>Selecione o local...</option>
+                {sortedOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )
+        }
+        
+        if (currentQuestion.field === 'riscoassociado_id') {
+          return (
+            <div className="space-y-2">
+              <select
+                defaultValue=""
+                onChange={(e) => {
+                  if (e.target.value) {
+                    handleUserResponse(e.target.value)
+                  }
+                }}
+                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="" disabled>Selecione o risco associado...</option>
+                {sortedOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
             </div>
           )
         }
 
         return (
           <div className="space-y-2">
-            {options.map((option, index) => (
+            {sortedOptions.map((option, index) => (
               <button
                 key={`${option.value}-${index}`}
                 onClick={() => handleUserResponse(option.value)}
@@ -1311,3 +1348,6 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     </div>
   )
 }
+
+
+

@@ -119,8 +119,9 @@ export async function PUT(
     // Verificar permissões
     const podeEditar = 
       execucao.matricula_executor === authResult.user?.matricula ||
-      authResult.user?.role === 'Admin';
-
+      authResult.user?.role === 'Admin' ||
+      authResult.user?.role === 'Usuario'
+    ;
     if (!podeEditar) {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }

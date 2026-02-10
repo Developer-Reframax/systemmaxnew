@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -76,6 +76,24 @@ export default function PlanoAcaoModal({
   });
   const [evidencias, setEvidencias] = useState<EvidenciaPlanoAcao[]>([]);
   const [novasEvidencias, setNovasEvidencias] = useState<File[]>([]);
+  const [buscaResponsavel, setBuscaResponsavel] = useState('');
+  const [responsavelOpen, setResponsavelOpen] = useState(false);
+
+  const usuariosFiltrados = useMemo(() => {
+    const termo = buscaResponsavel.trim().toLowerCase();
+    if (!termo) return usuarios;
+    return usuarios.filter((u) =>
+      u.nome.toLowerCase().includes(termo) ||
+      u.email.toLowerCase().includes(termo) ||
+      String(u.matricula).includes(termo)
+    );
+  }, [buscaResponsavel, usuarios]);
+
+  const exibirNomeCurto = (nome: string) => {
+    const partes = nome.trim().split(' ').filter(Boolean);
+    if (partes.length === 1) return partes[0];
+    return `${partes[0]} ${partes[partes.length - 1]}`;
+  };
 
   useEffect(() => {
     if (isOpen) {
@@ -169,12 +187,7 @@ export default function PlanoAcaoModal({
 
     setLoading(true);
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        toast.error('Token de autenticação não encontrado');
-        return;
-      }
-
+      
       if (!user?.matricula) {
         toast.error('Matrícula do usuário logado não encontrada');
         return;
@@ -200,10 +213,6 @@ export default function PlanoAcaoModal({
 
         const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify(createData)
         });
 
@@ -228,10 +237,6 @@ export default function PlanoAcaoModal({
 
         const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao/${planoId}`, {
           method: 'PUT',
-          headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-          },
           body: JSON.stringify(updateData)
         });
 
@@ -249,9 +254,6 @@ export default function PlanoAcaoModal({
 
           const uploadResponse = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao/${planoId}/evidencias`, {
             method: 'POST',
-            headers: {
-              'Authorization': `Bearer ${token}`
-            },
             body: formDataUpload
           });
 
@@ -358,6 +360,53 @@ export default function PlanoAcaoModal({
                     <Label>Responsável</Label>
                     <div className="p-3 bg-gray-100 rounded-md border">
                       <p className="text-gray-800">{plano.responsavel_info?.nome || 'Carregando...'} ({plano.responsavel_matricula})</p>
+                    </div>
+                  </div>
+                )}
+                {!plano && (
+                  <div className="space-y-2">
+                    <Label htmlFor="responsavel">Responsavel *</Label>
+                    <div className="relative">
+                      <Button
+                        variant="outline"
+                        className="w-full justify-between"
+                        id="responsavel"
+                        onClick={() => setResponsavelOpen((prev) => !prev)}
+                      >
+                        {formData.responsavel
+                          ? (() => {
+                              const selecionado = usuarios.find(u => u.matricula === formData.responsavel);
+                              return selecionado ? `${exibirNomeCurto(selecionado.nome)} (${selecionado.matricula})` : 'Selecione um responsavel';
+                            })()
+                          : 'Selecione um responsavel'}
+                      </Button>
+                      {responsavelOpen && (
+                        <div className="absolute z-10 mt-2 w-full rounded-md border bg-white p-3 shadow-lg">
+                          <Input
+                            placeholder="Buscar por nome, email ou matricula"
+                            value={buscaResponsavel}
+                            onChange={(e) => setBuscaResponsavel(e.target.value)}
+                          />
+                          <div className="mt-2 max-h-60 overflow-auto space-y-1">
+                            {usuariosFiltrados.length === 0 && (
+                              <p className="text-sm text-gray-500 px-1">Nenhum usuário encontrado</p>
+                            )}
+                            {usuariosFiltrados.map((usuario) => (
+                              <Button
+                                key={usuario.matricula}
+                                variant="ghost"
+                                className="w-full justify-start"
+                                onClick={() => {
+                                  handleInputChange('responsavel', usuario.matricula);
+                                  setResponsavelOpen(false);
+                                }}
+                              >
+                                {exibirNomeCurto(usuario.nome)} ({usuario.matricula})
+                              </Button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}

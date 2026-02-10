@@ -26,8 +26,7 @@ export async function GET(request: NextRequest) {
       unidade_id: searchParams.get('unidade_id') || undefined,
       area_id: searchParams.get('area_id') || undefined,
       classificacao_id: searchParams.get('classificacao_id') || undefined,
-      matricula_colaborador: searchParams.get('matricula_colaborador') ? 
-        parseInt(searchParams.get('matricula_colaborador')!) : undefined,
+      matricula_colaborador: authResult.user?.matricula || undefined,
       houve_desvios: searchParams.get('houve_desvios') as 'Sim' | 'Não' || undefined,
       evento: searchParams.get('evento') as 'ROTINA' | 'PARADA' || undefined,
       metodo_coach: searchParams.get('metodo_coach') as 'Sim' | 'Não' || undefined,

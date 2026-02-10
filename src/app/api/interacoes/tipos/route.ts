@@ -1,38 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
+
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-// Função para verificar o token JWT
-function verifyToken(token: string): { contrato_raiz: string; matricula: string } | null {
-  try {
-    return jwt.verify(token, process.env.JWT_SECRET!) as { contrato_raiz: string; matricula: string }
-  } catch {
-    return null
-  }
-}
+const AUTH_ERROR = { error: 'Token de acesso requerido' }
+
 
 // GET - Listar tipos de interação
 export async function GET(request: NextRequest) {
   try {
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Token de autorização necessário' },
-        { status: 401 }
-      )
+    const token = request.cookies.get('auth_token')?.value
+    if (!token) {
+      return NextResponse.json(AUTH_ERROR, { status: 401 })
     }
-
-    const token = authHeader.substring(7)
-    const decoded = verifyToken(token)
-    if (!decoded || !decoded.contrato_raiz) {
-      return NextResponse.json(
-        { error: 'Token inválido ou contrato_raiz não encontrado' },
-        { status: 401 }
-      )
+    const user = verifyToken(token)
+    if (!user) {
+      return NextResponse.json({ error: 'Token invalido ou expirado' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -40,7 +27,7 @@ export async function GET(request: NextRequest) {
     const contratoId = searchParams.get('contrato_id')
 
     // Usar contrato_id da query string se fornecido, senão usar contrato_raiz do token
-    const contratoFiltro = contratoId || decoded.contrato_raiz
+    const contratoFiltro = contratoId || user.contrato_raiz
 
     let query = supabase
       .from('interacao_tipos')
@@ -119,9 +106,9 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('interacao_tipos')
-      .insert({ 
-        tipo, 
-        contrato_id: decoded.contrato_raiz 
+      .insert({
+        tipo,
+        contrato_id: decoded.contrato_raiz
       })
       .select()
       .single()

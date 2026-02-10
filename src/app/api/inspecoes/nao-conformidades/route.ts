@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
     }
 
     const role = authResult.user?.role
-    const allowed = role === 'Admin' || role === 'Editor' || role === 'Gestor'
+    const allowed = role === 'Admin' || role === 'Editor' || role === 'Usuario'
     if (!allowed) {
       return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
     }

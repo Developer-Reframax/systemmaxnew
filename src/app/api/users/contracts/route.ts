@@ -1,28 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
-const jwtSecret = process.env.JWT_SECRET!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
-    const token = request.headers.get('Authorization')?.replace('Bearer ', '')
+    const token = request.cookies.get('auth_token')?.value
     if (!token) {
-      return NextResponse.json({ success: false, message: 'Token não fornecido' }, { status: 401 })
+      return NextResponse.json({ success: false, message: 'Token nao fornecido' }, { status: 401 })
     }
 
-    try {
-      jwt.verify(token, jwtSecret)
-    } catch {
-      return NextResponse.json({ success: false, message: 'Token inválido' }, { status: 401 })
+    const decoded = verifyToken(token)
+    if (!decoded) {
+      return NextResponse.json({ success: false, message: 'Token invalido ou expirado' }, { status: 401 })
     }
 
-    // Buscar contratos ativos
     const { data: contratos, error } = await supabase
       .from('contratos')
       .select('codigo, nome, status')
@@ -40,3 +36,4 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, message: 'Erro interno do servidor' }, { status: 500 })
   }
 }
+

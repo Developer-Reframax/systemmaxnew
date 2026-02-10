@@ -23,11 +23,6 @@ export async function POST(request: NextRequest) {
     const email = body.email || body.identifier
     const password = body.password
 
-    console.log('=== LOGIN DEBUG ===')
-    console.log('Received login request for:', email)
-    console.log('Password provided:', password ? 'Yes' : 'No')
-    console.log('Supabase URL:', supabaseUrl ? 'Set' : 'Not set')
-    console.log('Service Key:', supabaseServiceKey ? 'Set' : 'Not set')
 
     if (!email || !password) {
       console.log('Missing credentials - email:', !!email, 'password:', !!password)
@@ -42,24 +37,11 @@ export async function POST(request: NextRequest) {
     const { data: user, error } = await supabase
       .from('usuarios')
       .select('*')
-      .eq('email', email)
+      .or(`email.eq.${email}, matricula.eq.${email}`)
       .eq('status', 'ativo')
       .single()
 
-    console.log('Database query result:')
-    console.log('- User found:', !!user)
-    console.log('- Error:', error)
-    if (user) {
-      console.log('- User data:', {
-        matricula: user.matricula,
-        nome: user.nome,
-        email: user.email,
-        status: user.status,
-        role: user.role,
-        password_hash_exists: !!user.password_hash,
-        password_hash_length: user.password_hash?.length || 0
-      })
-    }
+
 
     if (error || !user) {
       console.log('User not found or database error:', error)
@@ -69,11 +51,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verificar senha
-    console.log('Comparing password...')
-    console.log('- Provided password:', password)
-    console.log('- Stored hash:', user.password_hash)
-    
+    // Verificar senha    
     const isValidPassword = await bcrypt.compare(password, user.password_hash)
     console.log('- Password comparison result:', isValidPassword)
 
@@ -105,10 +83,9 @@ export async function POST(request: NextRequest) {
     console.log('JWT token generated successfully')
     console.log('Login successful for user:', user.email)
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       success: true,
       message: 'Login realizado com sucesso',
-      token,
       user: {
         matricula: user.matricula,
         nome: user.nome,
@@ -119,6 +96,16 @@ export async function POST(request: NextRequest) {
         tipo: user.tipo
       }
     })
+
+    response.cookies.set('auth_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      path: '/',
+      maxAge: 60 * 60 * 8 // 8 horas
+    })
+
+    return response
 
   } catch (error) {
     console.error('=== LOGIN ERROR ===')

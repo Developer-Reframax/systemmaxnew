@@ -1,43 +1,34 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import jwt from 'jsonwebtoken'
+import { verifyToken } from '@/lib/auth'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key'
-
-interface JWTPayload {
-  userId: string
-  email: string
-  role: string
-}
-
-// Função para verificar autenticação e autorização
-async function verifyAuth(request: NextRequest): Promise<{ user: JWTPayload; error?: string }> {
-  const token = request.headers.get('authorization')?.replace('Bearer ', '')
-  
+// Verifica autenticacao/role usando cookie HttpOnly
+async function verifyAuth(request: NextRequest) {
+  const token = request.cookies.get('auth_token')?.value
   if (!token) {
-    return { user: {} as JWTPayload, error: 'Token não fornecido' }
+    return { user: null, error: 'Token nao fornecido' }
   }
 
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JWTPayload
-    
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!['Admin', 'Editor'].includes(decoded.role)) {
-      return { user: decoded, error: 'Acesso negado. Apenas administradores e editores podem gerenciar funcionalidades de usuários.' }
+  const decoded = verifyToken(token)
+  if (!decoded) {
+    return { user: null, error: 'Token invalido ou expirado' }
+  }
+
+  if (!['Admin', 'Editor'].includes(decoded.role)) {
+    return {
+      user: decoded,
+      error: 'Acesso negado. Apenas administradores e editores podem gerenciar funcionalidades de usuarios.'
     }
-
-    return { user: decoded }
-  } catch {
-    return { user: {} as JWTPayload, error: 'Token inválido' }
   }
+
+  return { user: decoded, error: undefined }
 }
 
-// GET - Buscar funcionalidades de um usuário específico
 export async function GET(request: NextRequest) {
   try {
     const { error: authError } = await verifyAuth(request)
@@ -45,18 +36,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: authError }, { status: 401 })
     }
 
-    // Obter matrícula do usuário da query string
     const { searchParams } = new URL(request.url)
     const matricula = searchParams.get('matricula')
 
     if (!matricula) {
       return NextResponse.json(
-        { success: false, error: 'Matrícula do usuário é obrigatória' },
+        { success: false, error: 'Matricula do usuario e obrigatoria' },
         { status: 400 }
       )
     }
 
-    // Buscar funcionalidades do usuário
     const { data: userFunctionalities, error } = await supabase
       .from('funcionalidade_usuarios')
       .select(`
@@ -76,7 +65,7 @@ export async function GET(request: NextRequest) {
       .eq('matricula_usuario', parseInt(matricula))
 
     if (error) {
-      console.error('Erro ao buscar funcionalidades do usuário:', error)
+      console.error('Erro ao buscar funcionalidades do usuario:', error)
       return NextResponse.json(
         { success: false, error: 'Erro interno do servidor' },
         { status: 500 }
@@ -87,9 +76,8 @@ export async function GET(request: NextRequest) {
       success: true,
       userFunctionalities: userFunctionalities || []
     })
-
   } catch (error) {
-    console.error('Erro na API de funcionalidades do usuário:', error)
+    console.error('Erro na API de funcionalidades do usuario:', error)
     return NextResponse.json(
       { success: false, error: 'Erro interno do servidor' },
       { status: 500 }
@@ -97,7 +85,6 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST - Adicionar acesso a uma funcionalidade
 export async function POST(request: NextRequest) {
   try {
     const { error: authError } = await verifyAuth(request)
@@ -106,20 +93,15 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    console.log('POST Body recebido:', JSON.stringify(body, null, 2))
     const { matricula_usuario, funcionalidade_id } = body
-    console.log('Parâmetros extraídos:', { matricula_usuario, funcionalidade_id })
 
     if (!matricula_usuario || !funcionalidade_id) {
-      console.log('Erro: Parâmetros obrigatórios ausentes')
       return NextResponse.json(
-        { success: false, error: 'Matrícula do usuário e ID da funcionalidade são obrigatórios' },
+        { success: false, error: 'Matricula do usuario e ID da funcionalidade sao obrigatorios' },
         { status: 400 }
       )
     }
 
-    // Verificar se o usuário já tem acesso à funcionalidade
-    console.log('Verificando funcionalidade existente para:', { matricula_usuario, funcionalidade_id })
     const { data: existing, error: checkError } = await supabase
       .from('funcionalidade_usuarios')
       .select('*')
@@ -127,10 +109,8 @@ export async function POST(request: NextRequest) {
       .eq('funcionalidade_id', funcionalidade_id)
       .single()
 
-    console.log('Resultado da verificação:', { existing, checkError })
-    
     if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Erro na verificação:', checkError)
+      console.error('Erro na verificacao de funcionalidade:', checkError)
       return NextResponse.json(
         { success: false, error: 'Erro ao verificar funcionalidade existente' },
         { status: 500 }
@@ -139,13 +119,11 @@ export async function POST(request: NextRequest) {
 
     if (existing) {
       return NextResponse.json(
-        { success: false, error: 'Usuário já tem acesso a esta funcionalidade' },
+        { success: false, error: 'Usuario ja tem acesso a esta funcionalidade' },
         { status: 400 }
       )
     }
 
-    // Adicionar acesso à funcionalidade
-    console.log('Inserindo nova funcionalidade para usuário:', { matricula_usuario, funcionalidade_id })
     const { data, error } = await supabase
       .from('funcionalidade_usuarios')
       .insert({
@@ -155,10 +133,8 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    console.log('Resultado da inserção:', { data, error })
-    
     if (error) {
-      console.error('Erro na inserção:', error)
+      console.error('Erro ao inserir funcionalidade para usuario:', error)
       return NextResponse.json(
         { success: false, error: 'Erro interno do servidor' },
         { status: 500 }
@@ -169,9 +145,8 @@ export async function POST(request: NextRequest) {
       success: true,
       userFunctionality: data
     })
-
   } catch (error) {
-    console.error('Erro na API de funcionalidades do usuário:', error)
+    console.error('Erro na API de funcionalidades do usuario:', error)
     return NextResponse.json(
       { success: false, error: 'Erro interno do servidor' },
       { status: 500 }
@@ -179,7 +154,6 @@ export async function POST(request: NextRequest) {
   }
 }
 
-// DELETE - Remover acesso a uma funcionalidade
 export async function DELETE(request: NextRequest) {
   try {
     const { error: authError } = await verifyAuth(request)
@@ -188,46 +162,39 @@ export async function DELETE(request: NextRequest) {
     }
 
     const body = await request.json()
-    console.log('DELETE Body recebido:', JSON.stringify(body, null, 2))
-    const { matricula_usuario, funcionalidade_id } = body;
-    console.log('Parâmetros extraídos:', { matricula_usuario, funcionalidade_id })
+    const { matricula_usuario, funcionalidade_id } = body
 
     if (!matricula_usuario || !funcionalidade_id) {
-      console.log('Erro DELETE: Parâmetros obrigatórios ausentes')
       return NextResponse.json(
-        { success: false, error: 'Matrícula do usuário e ID da funcionalidade são obrigatórios' },
+        { success: false, error: 'Matricula do usuario e ID da funcionalidade sao obrigatorios' },
         { status: 400 }
       )
     }
 
-    // Remover acesso à funcionalidade
-    console.log('Removendo funcionalidade para usuário:', { matricula_usuario, funcionalidade_id })
     const { error } = await supabase
       .from('funcionalidade_usuarios')
       .delete()
       .eq('matricula_usuario', matricula_usuario)
-      .eq('funcionalidade_id', funcionalidade_id);
+      .eq('funcionalidade_id', funcionalidade_id)
 
-    console.log('Resultado da remoção:', { error })
-    
     if (error) {
-      console.error('Erro na remoção:', error)
+      console.error('Erro ao remover funcionalidade do usuario:', error)
       return NextResponse.json(
-      { success: false, error: 'Erro interno do servidor' },
-      { status: 500 }
-    );
+        { success: false, error: 'Erro interno do servidor' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({
       success: true,
-      message: 'Acesso à funcionalidade removido com sucesso'
+      message: 'Acesso a funcionalidade removido com sucesso'
     })
-
   } catch (error) {
-    console.error('Erro na API de funcionalidades do usuário:', error)
+    console.error('Erro na API de funcionalidades do usuario:', error)
     return NextResponse.json(
       { success: false, error: 'Erro interno do servidor' },
       { status: 500 }
     )
   }
 }
+

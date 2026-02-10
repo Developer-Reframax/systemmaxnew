@@ -29,9 +29,9 @@ export async function GET(request: NextRequest) {
       .from('planos_acao')
       .select(`*,
         evidencias:evidencias_plano_acao(*),
-        pergunta:perguntas_formulario(pergunta),
+        pergunta:perguntas_formulario(pergunta, impeditivo),
         execucao:execucoes_inspecao(
-          id, status, data_inicio,
+          id, status, data_inicio, tag_equipamento,
           formulario:formularios_inspecao(titulo),
           local:locais(local)
         )
@@ -54,6 +54,10 @@ export async function GET(request: NextRequest) {
       o_que_fazer: string
       pergunta?: {
         pergunta: string
+        impeditivo?: boolean
+      }
+      execucao?: {
+        tag_equipamento?: string | null
       }
     }
 

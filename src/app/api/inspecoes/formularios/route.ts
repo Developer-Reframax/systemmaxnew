@@ -15,7 +15,11 @@ export async function GET(request: NextRequest) {
     if (!authResult.success) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
     }
-
+    const contratoRaiz = authResult.user?.contrato_raiz;
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Contrato do usuario nao informado' }, { status: 400 });
+    }
+    
     // Parâmetros de consulta
     const { searchParams } = new URL(request.url);
     const categoria_id = searchParams.get('categoria_id');
@@ -37,6 +41,8 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false });
 
     // Aplicar filtros
+    query = query.or(`contrato.eq.${contratoRaiz},corporativo.eq.true`);
+
     if (categoria_id) {
       query = query.eq('categoria_id', categoria_id);
     }
@@ -93,12 +99,12 @@ export async function POST(request: NextRequest) {
     }
 
     // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!authResult.user?.role || !['Admin', 'Editor'].includes(authResult.user.role)) {
+    if (!authResult.user?.role || !['Admin', 'Editor', 'Usuario'].includes(authResult.user.role)) {
       return NextResponse.json({ error: 'Acesso negado. Apenas administradores e editores podem criar formulários.' }, { status: 403 });
     }
 
     const body = await request.json();
-    const { categoria_id, titulo, corporativo = false, perguntas = [] } = body;
+    const { categoria_id, titulo, corporativo = false, check_list = false, perguntas = [] } = body;
 
     // Validar campos obrigatórios
     if (!categoria_id || !titulo) {
@@ -132,6 +138,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const contratoRaiz = authResult.user?.contrato_raiz;
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Contrato do usuario nao informado' }, { status: 400 });
+    }
+
     // Iniciar transação
     const { data: novoFormulario, error: insertError } = await supabase
       .from('formularios_inspecao')
@@ -139,7 +150,9 @@ export async function POST(request: NextRequest) {
         categoria_id,
         titulo,
         corporativo,
-        ativo: true
+        check_list,
+        ativo: true,
+        contrato: contratoRaiz
       })
       .select()
       .single();
@@ -156,6 +169,7 @@ export async function POST(request: NextRequest) {
         permite_conforme?: boolean
         permite_nao_conforme?: boolean
         permite_nao_aplica?: boolean
+        impeditivo?: boolean
       }
       const perguntasParaInserir = (perguntas as PerguntaInserir[]).map((pergunta, index: number) => ({
         formulario_id: novoFormulario.id,
@@ -163,7 +177,8 @@ export async function POST(request: NextRequest) {
         ordem: index + 1,
         permite_conforme: pergunta.permite_conforme !== false,
         permite_nao_conforme: pergunta.permite_nao_conforme !== false,
-        permite_nao_aplica: pergunta.permite_nao_aplica !== false
+        permite_nao_aplica: pergunta.permite_nao_aplica !== false,
+        impeditivo: pergunta.impeditivo === true
       }));
 
       const { error: perguntasError } = await supabase
@@ -203,3 +218,5 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
+
+

@@ -52,6 +52,10 @@ export async function GET(request: NextRequest) {
     if (!authResult.success) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
     }
+    const contratoRaiz = authResult.user?.contrato_raiz;
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Contrato do usuario nao informado' }, { status: 400 });
+    }
 
     // Data de 30 dias atrás
     const dataLimite = new Date();
@@ -66,11 +70,12 @@ export async function GET(request: NextRequest) {
       { count: execucoesEmAndamento },
       { count: execucoesConcluidas }
     ] = await Promise.all([
-      supabase.from('formularios_inspecao').select('*', { count: 'exact', head: true }),
-      supabase.from('formularios_inspecao').select('*', { count: 'exact', head: true }).eq('ativo', true),
-      supabase.from('execucoes_inspecao').select('*', { count: 'exact', head: true }),
-      supabase.from('execucoes_inspecao').select('*', { count: 'exact', head: true }).eq('status', 'em_andamento'),
+      supabase.from('formularios_inspecao').select('*', { count: 'exact', head: true }).eq('contrato', contratoRaiz),
+      supabase.from('formularios_inspecao').select('*', { count: 'exact', head: true }).eq('contrato', contratoRaiz).eq('ativo', true),
+      supabase.from('execucoes_inspecao').select('*', { count: 'exact', head: true }).eq('contrato', contratoRaiz),
+      supabase.from('execucoes_inspecao').select('*', { count: 'exact', head: true }).eq('contrato', contratoRaiz).eq('status', 'em_andamento'),
       supabase.from('execucoes_inspecao').select('*', { count: 'exact', head: true })
+        .eq('contrato', contratoRaiz)
         .eq('status', 'concluida')
         .gte('data_inicio', dataLimiteISO)
     ]);
@@ -79,6 +84,7 @@ export async function GET(request: NextRequest) {
     const { data: execucoesComNota } = await supabase
       .from('execucoes_inspecao')
       .select('nota_final')
+      .eq('contrato', contratoRaiz)
       .eq('status', 'concluida')
       .gte('data_inicio', dataLimiteISO)
       .not('nota_final', 'is', null);
@@ -99,6 +105,7 @@ export async function GET(request: NextRequest) {
         local:locais!execucoes_inspecao_local_id_fkey(local),
         executor:usuarios!execucoes_inspecao_matricula_executor_fkey(nome)
       `)
+      .eq('contrato', contratoRaiz)
       .order('created_at', { ascending: false })
       .limit(10);
 
@@ -111,7 +118,9 @@ export async function GET(request: NextRequest) {
         categoria:categorias_inspecao!formularios_inspecao_categoria_id_fkey(nome),
         execucoes:execucoes_inspecao(id, nota_final, status)
       `)
+      .eq('contrato', contratoRaiz)
       .eq('ativo', true)
+      .eq('execucoes_inspecao.contrato', contratoRaiz)
       .limit(10);
 
     // Processar formulários mais usados (suportando objeto ou array nas relações)
