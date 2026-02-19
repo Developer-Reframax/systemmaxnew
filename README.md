@@ -68,6 +68,7 @@ Documentação concisa para desenvolvedores sobre arquitetura, stack, segurança
   - `inspecoes-modulo-arquitetura.md`  
   - `emociograma-modulo-arquitetura.md`  
   - `kanban-reformulado-arquitetura.md`
+  - `systemmax-arquitetura-completa.md`
 
 ## Fluxo de Autorização (Exemplos)
 
