@@ -26,11 +26,14 @@ Em termos de arquitetura lógica, trata-se de um **monólito modular** (frontend
 ```mermaid
 flowchart TB
   U[Usuário via navegador]
+  GH[GitHub \n Repositório + CI]
+  VE[Vercel \n Build + Deploy + Hosting]
 
   subgraph WEB[Camada Web - Next.js]
     FE[Frontend React + App Router]
-    API[API Routes /api/*\n(Regras de negócio)]
-    MW[Middleware global\n(controle de acesso por cookie)]
+    API["API Routes /api/*<br/>Regras de negócio"]
+    SSR["Camada SSR/BFF Next.js<br/>Server Components + Route Handlers"]
+    MW["Middleware global<br/>controle de acesso por cookie"]
   end
 
   subgraph DATA[Camada de Dados - Supabase]
@@ -40,12 +43,15 @@ flowchart TB
   end
 
   subgraph EXT[Integrações externas]
-    WA[API WhatsApp Umbler Talk\n(reset de senha)]
+    WA["API WhatsApp Umbler Talk<br/>reset de senha"]
   end
 
+  GH --> VE
+  VE --> FE
   U --> FE
   FE --> MW
-  FE --> API
+  FE --> SSR
+  SSR --> API
   API --> PG
   API --> ST
   API --> RT
@@ -57,8 +63,9 @@ flowchart TB
 1. O usuário interage com as páginas da aplicação (App Router).
 2. O middleware valida presença de cookie de autenticação para rotas privadas.
 3. O frontend consome endpoints `/api/*` para operações de negócio.
-4. As APIs acessam o Supabase com chave adequada (anon/client ou service role/server).
-5. Para eventos em tempo real, APIs específicas abrem stream SSE conectado ao Realtime do Supabase.
+4. Existe uma camada server-side no Next.js (SSR/BFF), onde o front aciona o backend e o backend retorna dados prontos para renderização.
+5. As APIs usam o SDK do Supabase para consultar/escrever no banco e storage.
+6. Para eventos em tempo real, APIs específicas abrem stream SSE conectado ao Realtime do Supabase.
 
 ---
 
@@ -85,6 +92,9 @@ flowchart TB
 ## 3.3 Organização de execução
 
 - **Frontend + Backend** no mesmo artefato Next.js (App Router + API Routes).
+- **Backend mesclado ao Next.js com SDK do Supabase**: as regras de negócio e acesso a dados ficam no backend da aplicação (Route Handlers/SSR), consumindo `@supabase/supabase-js`.
+- **Hospedagem**: aplicação publicada na **Vercel**.
+- **Integração GitOps**: repositório no **GitHub**, com esteira de **CI/CD** conectada à Vercel (build, validações e deploy contínuo por branch/PR).
 - Scripts existentes:
   - `npm run dev`
   - `npm run build`
@@ -112,6 +122,23 @@ Cada módulo possui:
 ---
 
 ## 5) Comunicação Entre Serviços (Fluxos Técnicos)
+
+## 5.0 Fluxo SSR/BFF (Front → Back → Banco → Front)
+
+```mermaid
+sequenceDiagram
+  participant B as Browser
+  participant F as Frontend Next.js
+  participant BE as Backend Next.js (SSR/API)
+  participant DB as Supabase PostgreSQL
+
+  B->>F: Requisição de página/dados
+  F->>BE: Chamada server-side (SSR/BFF)
+  BE->>DB: Consulta via Supabase SDK
+  DB-->>BE: Dados
+  BE-->>F: Resposta consolidada
+  F-->>B: Renderização final
+```
 
 ## 5.1 Fluxo padrão (consulta/gravação)
 
@@ -249,6 +276,8 @@ Implicações arquiteturais:
 | Armazenamento de Arquivos | Upload e entrega de imagens/evidências | Supabase Storage |
 | Realtime | Eventos de atualização para monitoramentos | Supabase Realtime |
 | Integrações externas | Comunicação com serviços de notificação/mensageria | API externa (ex.: Umbler Talk) |
+| Plataforma de Deploy | Build, execução e escalabilidade da aplicação | Vercel |
+| Versionamento e CI/CD | Repositório, revisão de código e pipelines | GitHub + integração Vercel |
 
 ---
 
