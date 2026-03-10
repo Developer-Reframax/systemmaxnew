@@ -22,6 +22,7 @@ import {
 import FormularioConversacional from '@/components/desvios/FormularioConversacional'
 import { toast } from 'sonner'
 import * as ExcelJS from 'exceljs'
+import { usePermissions } from '@/contexts/PermissionsContext'
 
 interface DesviosStats {
   total: number
@@ -72,6 +73,22 @@ const EXPORT_COLUMNS: ExportColumn[] = [
 
 export default function DesviosDashboard() {
   const { user, hasRole } = useAuth()
+  const { permissions, loading: permissionsLoading } = usePermissions()
+  const MONITORAMENTO_FUNC_SLUG = 'relatos-monitoramento'
+  const SESMT_FUNC_SLUG = 'relatos-sesmt'
+  const SUPERVISOR_FUNC_SLUG = 'relatos-supervisor'
+
+  const hasPermissionSlug = (slug: string) =>
+    !!permissions?.modulos.some((modulo) =>
+      modulo.funcionalidades.some((funcionalidade) => funcionalidade.slug === slug)
+    )
+
+  const canAccessCentralMonitoramento = hasPermissionSlug(MONITORAMENTO_FUNC_SLUG)
+  const canAccessSesmt = hasPermissionSlug(SESMT_FUNC_SLUG)
+  const canAccessSupervisor = hasPermissionSlug(SUPERVISOR_FUNC_SLUG)
+  const permissionsLoaded = !permissionsLoading
+  const canAccessSesmtOrSupervisor = canAccessSesmt || canAccessSupervisor
+
   const [stats, setStats] = useState<DesviosStats>({
     total: 0,
     novos_periodo: 0,
@@ -317,13 +334,15 @@ export default function DesviosDashboard() {
             <option value="meus">Meus Desvios</option>
           </select>
 
-          <button
-            onClick={() => setShowExportModal(true)}
-            className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors flex items-center"
-          >
-            <Download className="h-4 w-4 mr-1" />
-            Exportar
-          </button>
+          {permissionsLoaded && canAccessSesmt && (
+            <button
+              onClick={() => setShowExportModal(true)}
+              className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors flex items-center"
+            >
+              <Download className="h-4 w-4 mr-1" />
+              Exportar
+            </button>
+          )}
         </div>
       </div>
 
@@ -492,7 +511,7 @@ export default function DesviosDashboard() {
             <span className="text-sm font-medium text-gray-900 dark:text-white">Meus Desvios</span>
           </Link>
 
-          {hasRole(['Admin', 'Editor']) && (
+          {permissionsLoaded && canAccessSesmtOrSupervisor && (
             <Link
               href="/desvios/avaliar"
               className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
@@ -502,47 +521,57 @@ export default function DesviosDashboard() {
             </Link>
           )}
 
-          <Link
-            href="/desvios/pendencias"
-            className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <Clock className="h-6 w-6 text-orange-600 mr-3" />
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Minhas Pendencias</span>
-          </Link>
+          {permissionsLoaded && canAccessSesmtOrSupervisor && (
+            <Link
+              href="/desvios/pendencias"
+              className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Clock className="h-6 w-6 text-orange-600 mr-3" />
+              <span className="text-sm font-medium text-gray-900 dark:text-white">Minhas Pendencias</span>
+            </Link>
+          )}
 
-          <Link
-            href="/desvios/gerais"
-            className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <AlertTriangle className="h-6 w-6 text-indigo-600 mr-3" />
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Desvios Gerais</span>
-          </Link>
+          {permissionsLoaded && canAccessSesmt && (
+            <Link
+              href="/desvios/gerais"
+              className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <AlertTriangle className="h-6 w-6 text-indigo-600 mr-3" />
+              <span className="text-sm font-medium text-gray-900 dark:text-white">Desvios Gerais</span>
+            </Link>
+          )}
 
-          <Link
-            href="/central-monitoramento"
-            className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <Activity className="h-6 w-6 text-orange-600 mr-3" />
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Central de Monitoramento</span>
-          </Link>
+          {permissionsLoaded && canAccessCentralMonitoramento && (
+            <Link
+              href="/central-monitoramento"
+              className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <Activity className="h-6 w-6 text-orange-600 mr-3" />
+              <span className="text-sm font-medium text-gray-900 dark:text-white">Central de Monitoramento</span>
+            </Link>
+          )}
 
-          <Link
-            href="/desvios/colaboradores"
-            className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <UserCheck className="h-6 w-6 text-emerald-600 mr-3" />
-            <span className="text-sm font-medium text-gray-900 dark:text-white">
-              Registros por colaborador
-            </span>
-          </Link>
+          {permissionsLoaded && canAccessSesmtOrSupervisor && (
+            <Link
+              href="/desvios/colaboradores"
+              className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <UserCheck className="h-6 w-6 text-emerald-600 mr-3" />
+              <span className="text-sm font-medium text-gray-900 dark:text-white">
+                Registros por colaborador
+              </span>
+            </Link>
+          )}
 
-          <Link
-            href="/desvios/kanban"
-            className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
-          >
-            <LayoutPanelLeft className="h-6 w-6 text-blue-600 mr-3" />
-            <span className="text-sm font-medium text-gray-900 dark:text-white">Kanban de Desvios</span>
-          </Link>
+          {permissionsLoaded && canAccessSesmtOrSupervisor && (
+            <Link
+              href="/desvios/kanban"
+              className="flex items-center p-4 border border-gray-200 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
+            >
+              <LayoutPanelLeft className="h-6 w-6 text-blue-600 mr-3" />
+              <span className="text-sm font-medium text-gray-900 dark:text-white">Kanban de Desvios</span>
+            </Link>
+          )}
 
           {hasRole('Admin') && (
             <Link
@@ -563,7 +592,7 @@ export default function DesviosDashboard() {
         onSuccess={loadDashboardData}
       />
 
-      {showExportModal ? (
+      {showExportModal && permissionsLoaded && canAccessSesmt ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40"

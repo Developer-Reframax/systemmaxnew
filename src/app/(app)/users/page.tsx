@@ -153,18 +153,18 @@ export default function UsersPage() {
       if (response.ok) {
         setCurrentUserFunctionalities(data.userFunctionalities || [])
       } else {
-        console.error('Erro ao carregar funcionalidades do usurio logado:', data.error)
+        console.error('Erro ao carregar funcionalidades do usuário logado:', data.error)
         setCurrentUserFunctionalities([])
       }
     } catch (error) {
-      console.error('Erro ao carregar funcionalidades do usurio logado:', error)
+      console.error('Erro ao carregar funcionalidades do usuário logado:', error)
       setCurrentUserFunctionalities([])
     }
   }, [authenticatedFetch, user?.matricula])
 
   const fetchUsers = useCallback(async () => {
     try {
-      const response = await authenticatedFetch('/api/users', {
+      const response = await authenticatedFetch('/api/users?sameContractOnly=true', {
         method: 'GET'
       })
 
@@ -176,8 +176,8 @@ export default function UsersPage() {
       
       setUsers(data.users || [])
     } catch (error) {
-      console.error('Erro ao carregar usurios:', error)
-      toast.error(error instanceof Error ? error.message : 'Erro ao carregar usurios')
+      console.error('Erro ao carregar usuários:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao carregar usuários')
     } finally {
       setLoading(false)
     }
@@ -818,7 +818,7 @@ export default function UsersPage() {
   return (
       <div className="space-y-6" data-allowed-functionalities-count={availableUsersFunctionalities.length}>
         <div className="flex justify-between items-center">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gerenciar Usurios</h1>
+          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gerenciar Usuários</h1>
           <div className="flex gap-3">
             {permissionsLoaded && canExportUsers && (
               <>

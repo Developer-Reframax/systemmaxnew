@@ -38,9 +38,6 @@ export async function getUserPermissions(
   contractCodeOverride?: string
 ): Promise<PermissionsResponse | null> {
   const contractCode = contractCodeOverride || user.contrato_raiz
-  if (!contractCode) {
-    return null
-  }
 
   const { data: modulesData, error: modulesError } = await supabase
     .from('modulos')
@@ -57,7 +54,9 @@ export async function getUserPermissions(
   const allowedModules = (modulesData || []).filter(
     (modulo) =>
       modulo.tipo === 'corporativo' ||
-      (modulo.modulo_contratos || []).some((link) => link.codigo_contrato === contractCode)
+      (contractCode
+        ? (modulo.modulo_contratos || []).some((link) => link.codigo_contrato === contractCode)
+        : false)
   )
 
   const modulos: ModuloDTO[] = []
@@ -79,13 +78,19 @@ export async function getUserPermissions(
     }
 
     const funcionalidadesPermitidas: FuncionalidadeDTO[] = (funcionalidadesData || [])
-      .filter(
-        (funcionalidade) =>
-          funcionalidade.tipo === 'corporativo' ||
-          (funcionalidade.funcionalidade_usuarios || []).some(
-            (link) => link.matricula_usuario === user.matricula
-          )
-      )
+      .filter((funcionalidade) => {
+        const hasUserLink = (funcionalidade.funcionalidade_usuarios || []).some(
+          (link) => link.matricula_usuario === user.matricula
+        )
+
+        // Em modulos exclusivos, a funcionalidade so aparece se estiver vinculada ao usuario.
+        if (modulo.tipo === 'exclusivo') {
+          return hasUserLink
+        }
+
+        // Em modulos corporativos, funcionalidades corporativas continuam globais.
+        return funcionalidade.tipo === 'corporativo' || hasUserLink
+      })
       .map((funcionalidade) => ({
         id: funcionalidade.id,
         nome: funcionalidade.nome,
@@ -104,4 +109,3 @@ export async function getUserPermissions(
 
   return { modulos }
 }
-

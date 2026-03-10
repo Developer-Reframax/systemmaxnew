@@ -13,8 +13,15 @@ function filterMenuByPermissions(user: AuthUser, permissions: PermissionsRespons
     }
 
     if (item.moduleSlug) {
-      const hasModule = permissions?.modulos.some((modulo) => modulo.slug === item.moduleSlug)
-      if (!hasModule) return false
+      const module = permissions?.modulos.find((modulo) => modulo.slug === item.moduleSlug)
+      if (!module) return false
+
+      if (item.functionalitySlug) {
+        const hasFunctionality = module.funcionalidades.some(
+          (funcionalidade) => funcionalidade.slug === item.functionalitySlug
+        )
+        if (!hasFunctionality) return false
+      }
     }
 
     return true

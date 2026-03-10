@@ -28,6 +28,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Buscar usuários do mesmo contrato_raiz
+    const { searchParams } = new URL(request.url)
+    const sameContractOnly =
+      searchParams.get('sameContractOnly') === 'true' ||
+      searchParams.get('same_contract_only') === 'true'
+
     let query = supabase
       .from('usuarios')
       .select(`
@@ -48,7 +53,7 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
 
     // Se não for Admin, filtrar pelo contrato_raiz do usuário logado
-    if (authResult.user.role !== 'Admin' && authResult.user.contrato_raiz) {
+    if (sameContractOnly && authResult.user.contrato_raiz) {
       query = query.eq('contrato_raiz', authResult.user.contrato_raiz)
     }
 

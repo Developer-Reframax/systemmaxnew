@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { Plus, Search, Edit, Trash2, FileText, Calendar, Users } from 'lucide-react'
 import { toast } from 'sonner'
+import { usePermissions } from '@/contexts/PermissionsContext'
 
 interface LetterFormData {
   letra: string
@@ -26,6 +27,13 @@ interface Leader {
 }
 
 export default function LettersPage() {
+  const { permissions, loading: permissionsLoading } = usePermissions()
+  const LETTERS_MANAGE_FUNC_SLUG = 'letras-gestao'
+  const canManageLetters = !!permissions?.modulos.some((modulo) =>
+    modulo.funcionalidades.some((funcionalidade) => funcionalidade.slug === LETTERS_MANAGE_FUNC_SLUG)
+  )
+  const permissionsLoaded = !permissionsLoading
+
   const [letters, setLetters] = useState<Letra[]>([])
   const [leaders, setLeaders] = useState<Leader[]>([])
   const [loading, setLoading] = useState(true)
@@ -85,6 +93,10 @@ export default function LettersPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (!canManageLetters) {
+      toast.error('Voce nao tem permissao para gerenciar letras')
+      return
+    }
     setLoading(true)
 
     try {
@@ -137,6 +149,10 @@ export default function LettersPage() {
   }
 
   const handleEdit = (letter: Letra) => {
+    if (!canManageLetters) {
+      toast.error('Voce nao tem permissao para gerenciar letras')
+      return
+    }
     setEditingLetter(letter)
     setFormData({
       letra: letter.letra,
@@ -146,6 +162,10 @@ export default function LettersPage() {
   }
 
   const handleDelete = async (letterId: string) => {
+    if (!canManageLetters) {
+      toast.error('Voce nao tem permissao para gerenciar letras')
+      return
+    }
     if (!confirm('Tem certeza que deseja excluir esta letra?')) return
 
     try {
@@ -183,17 +203,19 @@ export default function LettersPage() {
       <div className="space-y-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Gerenciar Letras</h1>
-          <button
-            onClick={() => {
-              setEditingLetter(null)
-              resetForm()
-              setShowModal(true)
-            }}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
-          >
-            <Plus className="h-4 w-4" />
-            Nova Letra
-          </button>
+          {permissionsLoaded && canManageLetters && (
+            <button
+              onClick={() => {
+                setEditingLetter(null)
+                resetForm()
+                setShowModal(true)
+              }}
+              className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center gap-2 transition-colors"
+            >
+              <Plus className="h-4 w-4" />
+              Nova Letra
+            </button>
+          )}
         </div>
 
         {/* Filters */}
@@ -271,20 +293,22 @@ export default function LettersPage() {
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                          <div className="flex justify-end space-x-2">
-                            <button
-                              onClick={() => handleEdit(letter)}
-                              className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(letter.id)}
-                              className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
+                          {permissionsLoaded && canManageLetters && (
+                            <div className="flex justify-end space-x-2">
+                              <button
+                                onClick={() => handleEdit(letter)}
+                                className="text-blue-600 hover:text-blue-900 dark:text-blue-400 dark:hover:text-blue-300"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(letter.id)}
+                                className="text-red-600 hover:text-red-900 dark:text-red-400 dark:hover:text-red-300"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
