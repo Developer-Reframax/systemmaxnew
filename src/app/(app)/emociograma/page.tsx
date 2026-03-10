@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import ModalRegistro from '@/components/emociograma/ModalRegistro'
 import { useAuth } from '@/hooks/useAuth'
+import { usePermissions } from '@/contexts/PermissionsContext'
 import {
   Smile,
   Meh,
@@ -50,6 +51,14 @@ interface UltimoRegistro {
 
 export default function EmociogramaDashboard() {
   const { user } = useAuth()
+  const { permissions, loading: permissionsLoading } = usePermissions()
+  const EMOCIOGRAMA_LIDER_SLUG = 'emociograma-lider'
+  const canAccessEmociogramaLider =
+    !permissionsLoading &&
+    !!permissions?.modulos.some((modulo) =>
+      modulo.funcionalidades.some((funcionalidade) => funcionalidade.slug === EMOCIOGRAMA_LIDER_SLUG)
+    )
+
   const router = useRouter()
   const [stats, setStats] = useState<EmociogramaStats | null>(null)
   const [ultimoRegistro, setUltimoRegistro] = useState<UltimoRegistro | null>(null)
@@ -192,13 +201,15 @@ export default function EmociogramaDashboard() {
             <p className="text-gray-600">Acompanhe seu bem-estar emocional</p>
           </div>
           <div className="flex items-center gap-3">
-            <button
-              onClick={() => router.push('/dds')}
-              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-500 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
-            >
-              <Play className="h-4 w-4" />
-              Iniciar DDS
-            </button>
+            {canAccessEmociogramaLider && (
+              <button
+                onClick={() => router.push('/dds')}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-500 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
+              >
+                <Play className="h-4 w-4" />
+                Iniciar DDS
+              </button>
+            )}
             <button
               onClick={handleNovoRegistro}
               disabled={!canCreateToday}
@@ -383,32 +394,38 @@ export default function EmociogramaDashboard() {
             <p className="text-sm text-gray-600">Ver todos os seus registros</p>
           </div>
 
-          <div
-            className="bg-white rounded-lg shadow-sm border p-6 text-center cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => router.push('/emociograma/tratativas')}
-          >
-            <Users className="w-8 h-8 mx-auto mb-3 text-green-600" />
-            <h3 className="font-semibold mb-2">Tratativas</h3>
-            <p className="text-sm text-gray-600">Acompanhar tratativas ativas</p>
-          </div>
+          {canAccessEmociogramaLider && (
+            <div
+              className="bg-white rounded-lg shadow-sm border p-6 text-center cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => router.push('/emociograma/tratativas')}
+            >
+              <Users className="w-8 h-8 mx-auto mb-3 text-green-600" />
+              <h3 className="font-semibold mb-2">Tratativas</h3>
+              <p className="text-sm text-gray-600">Acompanhar tratativas ativas</p>
+            </div>
+          )}
 
-          <div
-            className="bg-white rounded-lg shadow-sm border p-6 text-center cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => router.push('/emociograma/historico-tratativas')}
-          >
-            <FileText className="w-8 h-8 mx-auto mb-3 text-indigo-600" />
-            <h3 className="font-semibold mb-2">Histórico de Tratativas</h3>
-            <p className="text-sm text-gray-600">Ver todas as tratativas e alertas</p>
-          </div>
+          {canAccessEmociogramaLider && (
+            <div
+              className="bg-white rounded-lg shadow-sm border p-6 text-center cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => router.push('/emociograma/historico-tratativas')}
+            >
+              <FileText className="w-8 h-8 mx-auto mb-3 text-indigo-600" />
+              <h3 className="font-semibold mb-2">Histórico de Tratativas</h3>
+              <p className="text-sm text-gray-600">Ver todas as tratativas e alertas</p>
+            </div>
+          )}
 
-          <div
-            className="bg-white rounded-lg shadow-sm border p-6 text-center cursor-pointer hover:shadow-md transition-shadow"
-            onClick={() => router.push('/emociograma/relatorios')}
-          >
-            <BarChart3 className="w-8 h-8 mx-auto mb-3 text-purple-600" />
-            <h3 className="font-semibold mb-2">Relatórios</h3>
-            <p className="text-sm text-gray-600">Análises detalhadas</p>
-          </div>
+          {canAccessEmociogramaLider && (
+            <div
+              className="bg-white rounded-lg shadow-sm border p-6 text-center cursor-pointer hover:shadow-md transition-shadow"
+              onClick={() => router.push('/emociograma/relatorios')}
+            >
+              <BarChart3 className="w-8 h-8 mx-auto mb-3 text-purple-600" />
+              <h3 className="font-semibold mb-2">Relatórios</h3>
+              <p className="text-sm text-gray-600">Análises detalhadas</p>
+            </div>
+          )}
         </div>
       </div>
 

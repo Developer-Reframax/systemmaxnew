@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +48,13 @@ interface FormularioData {
 function NovoFormularioPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { permissions, loading: permissionsLoading } = usePermissions();
+  const INSPECAO_GESTOR_FUNC_SLUG = 'inspecao-gestao';
+  const canSeeCorporateCheckbox =
+    !permissionsLoading &&
+    !!permissions?.modulos.some((modulo) =>
+      modulo.funcionalidades.some((funcionalidade) => funcionalidade.slug === INSPECAO_GESTOR_FUNC_SLUG)
+    );
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<FormularioData>({
@@ -277,16 +285,18 @@ function NovoFormularioPage() {
               </div>
 
               <div className="flex items-center space-x-6">
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="corporativo"
-                    checked={formData.corporativo}
-                    onCheckedChange={(checked) => setFormData({ ...formData, corporativo: !!checked })}
-                  />
-                  <label htmlFor="corporativo" className="text-sm font-medium text-gray-700">
-                    Formulário Corporativo
-                  </label>
-                </div>
+                {canSeeCorporateCheckbox && (
+                  <div className="flex items-center space-x-2">
+                    <Checkbox
+                      id="corporativo"
+                      checked={formData.corporativo}
+                      onCheckedChange={(checked) => setFormData({ ...formData, corporativo: !!checked })}
+                    />
+                    <label htmlFor="corporativo" className="text-sm font-medium text-gray-700">
+                      Formulário Corporativo
+                    </label>
+                  </div>
+                )}
                 <div className="flex items-center space-x-2">
                   <Checkbox
                     id="check_list"

@@ -10,25 +10,37 @@ const supabase = createClient(
 function requireAuth(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value
   if (!token) {
-    return { user: null, response: NextResponse.json({ success: false, error: 'Token de acesso requerido' }, { status: 401 }) }
+    return {
+      user: null,
+      response: NextResponse.json(
+        { success: false, error: 'Token de acesso requerido' },
+        { status: 401 }
+      )
+    }
   }
 
   const user = verifyToken(token)
   if (!user) {
-    return { user: null, response: NextResponse.json({ success: false, error: 'Token invalido ou expirado' }, { status: 401 }) }
+    return {
+      user: null,
+      response: NextResponse.json(
+        { success: false, error: 'Token invalido ou expirado' },
+        { status: 401 }
+      )
+    }
   }
 
   return { user, response: null as NextResponse | null }
 }
 
-// GET - Buscar todas as funcionalidades de módulos exclusivos
+// GET - Buscar todas as funcionalidades ativas
 export async function GET(request: NextRequest) {
   try {
-    // Autenticação via cookie: apenas verifica presença/validade básica do JWT
+    // Autenticacao via cookie: apenas verifica presenca/validade basica do JWT
     const { user, response } = requireAuth(request)
     if (!user) return response!
 
-    // Permissão: somente Admin ou Editor
+    // Permissao: somente Admin ou Editor
     if (user.role !== 'Admin' && user.role !== 'Editor') {
       return NextResponse.json(
         { success: false, error: 'Acesso negado. Apenas Admin e Editor podem gerenciar funcionalidades.' },
@@ -36,23 +48,21 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar funcionalidades de módulos exclusivos
+    // Buscar funcionalidades ativas de todos os modulos
     const { data: functionalities, error } = await supabase
       .from('modulo_funcionalidades')
-      .select(`
+      .select(
+        `
         *,
         modulos(
           id,
           nome,
           tipo
         )
-      `)
+      `
+      )
       .eq('ativa', true)
       .order('nome')
-
-    // Filtrar por tipo exclusivo
-    const exclusiveFunctionalities =
-      functionalities?.filter((func: { modulos?: { tipo?: string } }) => func.modulos?.tipo === 'exclusivo') || []
 
     if (error) {
       console.error('Supabase error:', error)
@@ -64,7 +74,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      functionalities: exclusiveFunctionalities
+      functionalities: functionalities || []
     })
   } catch (error) {
     console.error('Erro na API de funcionalidades:', error)

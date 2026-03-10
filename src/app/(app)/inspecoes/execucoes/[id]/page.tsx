@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useAuth } from '@/hooks/useAuth';
 import { 
   ArrowLeft,
   Calendar,
@@ -93,6 +94,7 @@ interface ExecucaoDetalhes {
 function DetalhesExecucaoPage() {
   const router = useRouter();
   const params = useParams();
+  const { user } = useAuth();
   const [execucao, setExecucao] = useState<ExecucaoDetalhes | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
@@ -320,6 +322,13 @@ function DetalhesExecucaoPage() {
 
   const canEdit = () => {
     return execucao?.status === 'em_andamento';
+  };
+
+  const canContinueEdit = () => {
+    if (!execucao || !user) return false;
+    const currentUserMatricula = String(user.matricula);
+    const executorMatricula = String(execucao.executor.matricula);
+    return canEdit() && currentUserMatricula === executorMatricula;
   };
 
   const handleExportPDF = async () => {
@@ -595,7 +604,7 @@ function DetalhesExecucaoPage() {
               )}
               Exportar PDF
             </Button>
-            {canEdit() && (
+            {canContinueEdit() && (
               <Button
                 onClick={() => router.push(`/inspecoes/execucoes/continuar/${execucao.id}`)}
                 className="bg-blue-600 hover:bg-blue-700"

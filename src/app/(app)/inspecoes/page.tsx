@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import {
   ClipboardList,
   ClipboardCheck,
@@ -55,6 +56,13 @@ interface StatsData {
 export default function InspecoesDashboard() {
   const router = useRouter();
   const { user } = useAuth();
+  const { permissions, loading: permissionsLoading } = usePermissions();
+  const INSPECAO_SESMT_FUNC_SLUG = 'inspecao-sesmt';
+
+  const canAccessInspecaoSesmt = !!permissions?.modulos.some((modulo) =>
+    modulo.funcionalidades.some((funcionalidade) => funcionalidade.slug === INSPECAO_SESMT_FUNC_SLUG)
+  );
+
   const [stats, setStats] = useState<StatsData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -129,6 +137,17 @@ export default function InspecoesDashboard() {
     }
   ];
 
+  const filteredQuickActions = quickActions.filter((action) => {
+    const isRestrictedCard =
+      action.href === '/inspecoes/formularios' || action.href === '/inspecoes/equipamentos';
+
+    if (!isRestrictedCard) {
+      return true;
+    }
+
+    return !permissionsLoading && canAccessInspecaoSesmt;
+  });
+
   const getStatusProps = (status: string) => {
     switch (status) {
       case 'em_andamento':
@@ -164,7 +183,7 @@ export default function InspecoesDashboard() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {quickActions.map((action) => (
+          {filteredQuickActions.map((action) => (
             <Card
               key={action.href}
               className="cursor-pointer hover:shadow-lg transition-shadow"
