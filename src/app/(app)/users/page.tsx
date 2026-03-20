@@ -367,15 +367,19 @@ export default function UsersPage() {
   }, [authenticatedFetch])
 
   useEffect(() => {
+    if (permissionsLoading) return
+    if (!usersModulePermissions) return
+
     fetchUsers()
     fetchContractsForDropdown()
-  }, [fetchContractsForDropdown, fetchUsers])
+  }, [fetchContractsForDropdown, fetchUsers, permissionsLoading, usersModulePermissions])
 
   useEffect(() => {
+    if (permissionsLoading || !usersModulePermissions) return
     if (user?.matricula) {
       fetchCurrentUserFunctionalities()
     }
-  }, [fetchCurrentUserFunctionalities, user?.matricula])
+  }, [fetchCurrentUserFunctionalities, permissionsLoading, user?.matricula, usersModulePermissions])
 
   const fetchLettersForContract = async (contratoId: string) => {
     if (!contratoId) {
@@ -807,10 +811,26 @@ export default function UsersPage() {
     }
   }
 
-  if (!user || user.role === 'Usuario') {
+  if (!user) {
     return (
         <div className="flex items-center justify-center h-64">
-          <p className="text-gray-500">Acesso negado. Apenas administradores e editores podem gerenciar usurios.</p>
+          <p className="text-gray-500">Acesso negado. Usuário não autenticado.</p>
+        </div>
+    )
+  }
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+      </div>
+    )
+  }
+
+  if (!usersModulePermissions) {
+    return (
+        <div className="flex items-center justify-center h-64">
+          <p className="text-gray-500">Acesso negado. Módulo de usuários não habilitado para este contrato.</p>
         </div>
     )
   }
