@@ -19,9 +19,24 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const contrato = searchParams.get('contrato')
+    const contratoParam = searchParams.get('contrato')
     const periodo = searchParams.get('periodo') || '30' // dias
     const tipo = searchParams.get('tipo') // 'geral' ou 'meus'
+    const userContract = authResult.user?.contrato_raiz
+
+    if (!userContract) {
+      return NextResponse.json(
+        { success: false, message: 'Contrato raiz do usuario nao encontrado' },
+        { status: 400 }
+      )
+    }
+
+    if (contratoParam && contratoParam !== userContract) {
+      return NextResponse.json(
+        { success: false, message: 'Acesso negado para contrato diferente do usuario logado' },
+        { status: 403 }
+      )
+    }
 
     // Calcular data de início baseada no período
     const dataInicio = new Date()
@@ -29,10 +44,10 @@ export async function GET(request: NextRequest) {
 
     // Função helper para criar query base
     const createBaseQuery = () => {
-      let query = supabase.from('desvios').select('*', { count: 'exact', head: true })
-      if (contrato) {
-        query = query.eq('contrato', contrato)
-      }
+      let query = supabase
+        .from('desvios')
+        .select('*', { count: 'exact', head: true })
+        .eq('contrato', userContract)
       if (tipo === 'meus') {
         query = query.eq('matricula_user', authResult.user?.matricula)
       }
@@ -70,8 +85,8 @@ export async function GET(request: NextRequest) {
     let statusQuery = supabase
       .from('desvios')
       .select('status')
-    
-    if (contrato) statusQuery = statusQuery.eq('contrato', contrato)
+      .eq('contrato', userContract)
+
     if (tipo === 'meus') statusQuery = statusQuery.eq('matricula_user', authResult.user?.matricula)
     
     const { data: statusData } = await statusQuery
@@ -88,8 +103,8 @@ export async function GET(request: NextRequest) {
         natureza_id,
         natureza:natureza_id(natureza)
       `)
-    
-    if (contrato) naturezaQuery = naturezaQuery.eq('contrato', contrato)
+      .eq('contrato', userContract)
+
     if (tipo === 'meus') naturezaQuery = naturezaQuery.eq('matricula_user', authResult.user?.matricula)
     
     const { data: naturezaData } = await naturezaQuery
@@ -109,8 +124,8 @@ export async function GET(request: NextRequest) {
         tipo_id,
         tipo:tipo_id(tipo)
       `)
-    
-    if (contrato) tipoQuery = tipoQuery.eq('contrato', contrato)
+      .eq('contrato', userContract)
+
     if (tipo === 'meus') tipoQuery = tipoQuery.eq('matricula_user', authResult.user?.matricula)
     
     const { data: tipoData } = await tipoQuery
@@ -132,8 +147,8 @@ export async function GET(request: NextRequest) {
       .from('desvios')
       .select('created_at, status')
       .gte('created_at', dataInicioEvolucao.toISOString())
-    
-    if (contrato) evolucaoQuery = evolucaoQuery.eq('contrato', contrato)
+      .eq('contrato', userContract)
+
     if (tipo === 'meus') evolucaoQuery = evolucaoQuery.eq('matricula_user', authResult.user?.matricula)
     
     const { data: evolucaoData } = await evolucaoQuery
@@ -158,12 +173,11 @@ export async function GET(request: NextRequest) {
     }
     let topResponsaveis: TopResponsavel[] = []
     if (['Admin', 'Editor'].includes(authResult.user?.role || '')) {
-      let responsavelQuery = supabase
+      const responsavelQuery = supabase
         .from('desvios')
         .select('responsavel')
         .not('responsavel', 'is', null)
-      
-      if (contrato) responsavelQuery = responsavelQuery.eq('contrato', contrato)
+        .eq('contrato', userContract)
       
       const { data: responsavelData } = await responsavelQuery
       
@@ -184,7 +198,7 @@ export async function GET(request: NextRequest) {
       .select('created_at, updated_at')
       .eq('status', 'Concluído')
     
-    if (contrato) tempoResolucaoQuery = tempoResolucaoQuery.eq('contrato', contrato)
+    tempoResolucaoQuery = tempoResolucaoQuery.eq('contrato', userContract)
     if (tipo === 'meus') tempoResolucaoQuery = tempoResolucaoQuery.eq('matricula_user', authResult.user?.matricula)
     
     const { data: resolucaoData } = await tempoResolucaoQuery
@@ -216,7 +230,7 @@ export async function GET(request: NextRequest) {
       .gte('data_limite', new Date().toISOString())
       .lte('data_limite', proximoVencimento.toISOString())
     
-    if (contrato) vencimentoQuery = vencimentoQuery.eq('contrato', contrato)
+    vencimentoQuery = vencimentoQuery.eq('contrato', userContract)
     if (tipo === 'meus') {
       vencimentoQuery = vencimentoQuery.or(`matricula_user.eq.${authResult.user?.matricula},responsavel.eq.${authResult.user?.matricula}`)
     }

@@ -21,8 +21,10 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url)
     const categoria = searchParams.get('categoria')
     const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '10')
-    const offset = (page - 1) * limit
+    const requestedLimit = searchParams.get('limit')
+    const parsedLimit = requestedLimit ? parseInt(requestedLimit) : NaN
+    const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? parsedLimit : null
+    const offset = limit ? (page - 1) * limit : 0
 
     let query = supabase
       .from('riscos_associados')
@@ -35,7 +37,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Aplicar paginação
-    query = query.range(offset, offset + limit - 1)
+    if (limit) {
+      query = query.range(offset, offset + limit - 1)
+    }
 
     const { data: riscosAssociados, error, count } = await query
 
@@ -53,9 +57,9 @@ export async function GET(request: NextRequest) {
       total: count || 0,
       pagination: {
         page,
-        limit,
+        limit: limit ?? (count || 0),
         total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit)
+        totalPages: limit ? Math.ceil((count || 0) / limit) : 1
       }
     })
 
@@ -276,3 +280,4 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
+
