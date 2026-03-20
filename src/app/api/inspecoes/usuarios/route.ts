@@ -25,9 +25,6 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search');
     const ativo = searchParams.get('ativo');
     const role = searchParams.get('role');
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '50');
-    const offset = (page - 1) * limit;
 
     // Construir query
     let query = supabase
@@ -52,9 +49,6 @@ export async function GET(request: NextRequest) {
       query = query.eq('role', role);
     }
 
-    // Aplicar paginacao
-    query = query.range(offset, offset + limit - 1);
-
     const { data: usuarios, error, count } = await query;
 
     if (error) {
@@ -62,14 +56,16 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
     }
 
+    const total = count ?? usuarios?.length ?? 0;
+
     return NextResponse.json({
       success: true,
       data: usuarios || [],
       pagination: {
-        page,
-        limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit)
+        page: 1,
+        limit: total,
+        total,
+        totalPages: 1
       }
     });
   } catch (error) {
