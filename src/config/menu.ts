@@ -34,7 +34,7 @@ export type MenuItem = {
 
 export const menuItems: MenuItem[] = [
   { name: 'Dashboard', href: '/dashboard', icon: 'home' },
-  { name: 'Usuarios', href: '/users', icon: 'users', roles: ['Admin', 'Editor'], moduleSlug: 'usuario' },
+  { name: 'Usuarios', href: '/users', icon: 'users', moduleSlug: 'usuario' },
   { name: 'Contratos', href: '/contracts', icon: 'building', roles: ['Admin'], moduleSlug: 'contratos' },
   { name: 'Modulos', href: '/modules', icon: 'layers', roles: ['Admin'] },
   { name: 'Letras', href: '/letters', icon: 'mail', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'letras', functionalitySlug: 'letras-gestao' },
