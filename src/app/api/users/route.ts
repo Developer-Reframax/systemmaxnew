@@ -8,7 +8,7 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
-// GET - Listar usuários (apenas admins)
+// GET - Listar usuarios
 export async function GET(request: NextRequest) {
   try {
     const authResult = await verifyJWTToken(request)
@@ -20,12 +20,14 @@ export async function GET(request: NextRequest) {
     }
 
     // Verificar se é admin ou editor usando o role do token JWT
-    if (!authResult.user || !authResult.user.role || !['Admin', 'Editor'].includes(authResult.user.role)) {
+    if (!authResult.user) {
       return NextResponse.json(
-        { success: false, message: 'Acesso negado - apenas administradores e editores' },
-        { status: 403 }
+        { success: false, message: 'Usuario nao autenticado' },
+        { status: 401 }
       )
     }
+
+    const isPrivileged = ['Admin', 'Editor'].includes(authResult.user.role)
 
     // Buscar usuários do mesmo contrato_raiz
     const { searchParams } = new URL(request.url)
@@ -52,8 +54,16 @@ export async function GET(request: NextRequest) {
       `)
       .order('created_at', { ascending: false })
 
-    // Se não for Admin, filtrar pelo contrato_raiz do usuário logado
-    if (sameContractOnly && authResult.user.contrato_raiz) {
+    // Usuarios sem privilegio veem sempre apenas o proprio contrato.
+    if (!isPrivileged) {
+      if (!authResult.user.contrato_raiz) {
+        return NextResponse.json(
+          { success: false, message: 'Contrato raiz do usuario nao encontrado' },
+          { status: 400 }
+        )
+      }
+      query = query.eq('contrato_raiz', authResult.user.contrato_raiz)
+    } else if (sameContractOnly && authResult.user.contrato_raiz) {
       query = query.eq('contrato_raiz', authResult.user.contrato_raiz)
     }
 
@@ -282,3 +292,4 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
+

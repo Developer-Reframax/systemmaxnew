@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
-    const contrato = searchParams.get('contrato')
+    const contratoParam = searchParams.get('contrato')
     const responsavel = searchParams.get('responsavel')
     const matricula_user = searchParams.get('matricula_user')
     const meus = searchParams.get('meus') // Novo parâmetro para filtrar desvios do usuário
@@ -29,6 +29,21 @@ export async function GET(request: NextRequest) {
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const offset = (page - 1) * limit
+    const userContract = authResult.user?.contrato_raiz
+
+    if (!userContract) {
+      return NextResponse.json(
+        { success: false, message: 'Contrato raiz do usuario nao encontrado' },
+        { status: 400 }
+      )
+    }
+
+    if (contratoParam && contratoParam !== userContract) {
+      return NextResponse.json(
+        { success: false, message: 'Acesso negado para contrato diferente do usuario logado' },
+        { status: 403 }
+      )
+    }
 
     let query = supabase
       .from('desvios')
@@ -41,20 +56,18 @@ export async function GET(request: NextRequest) {
         criador:matricula_user(matricula, nome, email)
       `)
       .order('created_at', { ascending: false })
+      .eq('contrato', userContract)
       .range(offset, offset + limit - 1)
 
     let countQuery = supabase
       .from('desvios')
       .select('*', { count: 'exact', head: true })
+      .eq('contrato', userContract)
 
     // Aplicar filtros
     if (status) {
       query = query.eq('status', status)
       countQuery = countQuery.eq('status', status)
-    }
-    if (contrato) {
-      query = query.eq('contrato', contrato)
-      countQuery = countQuery.eq('contrato', contrato)
     }
     if (responsavel) {
       query = query.eq('responsavel', responsavel)
@@ -410,3 +423,4 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
+

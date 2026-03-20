@@ -7,33 +7,41 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Verifica autenticacao/role usando cookie HttpOnly
-async function verifyAuth(request: NextRequest) {
+// Verifica autenticacao usando cookie HttpOnly.
+async function verifyAuth(
+  request: NextRequest,
+  options: { requirePrivileged?: boolean } = {}
+) {
+  const { requirePrivileged = false } = options
   const token = request.cookies.get('auth_token')?.value
   if (!token) {
-    return { user: null, error: 'Token nao fornecido' }
+    return { user: null, error: 'Token nao fornecido', status: 401 }
   }
 
   const decoded = verifyToken(token)
   if (!decoded) {
-    return { user: null, error: 'Token invalido ou expirado' }
+    return { user: null, error: 'Token invalido ou expirado', status: 401 }
   }
 
-  if (!['Admin', 'Editor'].includes(decoded.role)) {
+  if (requirePrivileged && !['Admin', 'Editor'].includes(decoded.role)) {
     return {
       user: decoded,
-      error: 'Acesso negado. Apenas administradores e editores podem gerenciar funcionalidades de usuarios.'
+      error: 'Acesso negado. Apenas administradores e editores podem gerenciar funcionalidades de usuarios.',
+      status: 403
     }
   }
 
-  return { user: decoded, error: undefined }
+  return { user: decoded, error: undefined, status: undefined }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const { error: authError } = await verifyAuth(request)
+    const { user, error: authError, status: authStatus } = await verifyAuth(request)
     if (authError) {
-      return NextResponse.json({ error: authError }, { status: 401 })
+      return NextResponse.json({ error: authError }, { status: authStatus || 401 })
+    }
+    if (!user) {
+      return NextResponse.json({ error: 'Usuario nao autenticado' }, { status: 401 })
     }
 
     const { searchParams } = new URL(request.url)
@@ -43,6 +51,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, error: 'Matricula do usuario e obrigatoria' },
         { status: 400 }
+      )
+    }
+
+    const matriculaNumber = parseInt(matricula, 10)
+    if (Number.isNaN(matriculaNumber)) {
+      return NextResponse.json(
+        { success: false, error: 'Matricula invalida' },
+        { status: 400 }
+      )
+    }
+
+    const isPrivileged = ['Admin', 'Editor'].includes(user.role)
+    if (!isPrivileged && user.matricula !== matriculaNumber) {
+      return NextResponse.json(
+        { success: false, error: 'Acesso negado' },
+        { status: 403 }
       )
     }
 
@@ -62,7 +86,7 @@ export async function GET(request: NextRequest) {
           )
         )
       `)
-      .eq('matricula_usuario', parseInt(matricula))
+      .eq('matricula_usuario', matriculaNumber)
 
     if (error) {
       console.error('Erro ao buscar funcionalidades do usuario:', error)
@@ -87,9 +111,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { error: authError } = await verifyAuth(request)
+    const { error: authError, status: authStatus } = await verifyAuth(request, {
+      requirePrivileged: true
+    })
     if (authError) {
-      return NextResponse.json({ error: authError }, { status: 401 })
+      return NextResponse.json({ error: authError }, { status: authStatus || 401 })
     }
 
     const body = await request.json()
@@ -156,9 +182,11 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { error: authError } = await verifyAuth(request)
+    const { error: authError, status: authStatus } = await verifyAuth(request, {
+      requirePrivileged: true
+    })
     if (authError) {
-      return NextResponse.json({ error: authError }, { status: 401 })
+      return NextResponse.json({ error: authError }, { status: authStatus || 401 })
     }
 
     const body = await request.json()
@@ -197,4 +225,3 @@ export async function DELETE(request: NextRequest) {
     )
   }
 }
-
