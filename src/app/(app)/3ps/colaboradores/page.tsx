@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, FileSpreadsheet, Users } from 'lucide-react'
+import { ArrowLeft, FileSpreadsheet } from 'lucide-react'
 import { toast } from 'sonner'
 import * as ExcelJS from 'exceljs'
 
@@ -12,6 +12,7 @@ interface Colaborador3P {
   funcao: string | null
   equipe: string | null
   letra: string | null
+  dataRealizacao3p: string | null
   createdCount: number
   participatedCount: number
   totalCount: number
@@ -58,6 +59,7 @@ export default function Colaboradores3P() {
         { header: 'Funcao', key: 'funcao', width: 20 },
         { header: 'Equipe', key: 'equipe', width: 18 },
         { header: 'Letra', key: 'letra', width: 10 },
+        { header: 'Data realizacao 3P', key: 'dataRealizacao3p', width: 22 },
         { header: 'Fez 3P', key: 'fez3p', width: 10 },
         { header: 'Criados', key: 'createdCount', width: 10 },
         { header: 'Participacoes', key: 'participatedCount', width: 15 },
@@ -71,6 +73,7 @@ export default function Colaboradores3P() {
           funcao: colaborador.funcao || '-',
           equipe: colaborador.equipe || '-',
           letra: colaborador.letra || '-',
+          dataRealizacao3p: colaborador.dataRealizacao3p || '-',
           fez3p: colaborador.fez3p ? 'Sim' : 'Nao',
           createdCount: colaborador.createdCount,
           participatedCount: colaborador.participatedCount,
@@ -149,6 +152,7 @@ export default function Colaboradores3P() {
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Funcao</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Equipe</th>
                   <th className="px-4 py-3 text-left font-medium text-gray-600">Letra</th>
+                  <th className="px-4 py-3 text-left font-medium text-gray-600">Data realizacao 3P</th>
                   <th className="px-4 py-3 text-center font-medium text-gray-600">Fez 3P</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-600">Criados</th>
                   <th className="px-4 py-3 text-right font-medium text-gray-600">Participacoes</th>
@@ -163,6 +167,7 @@ export default function Colaboradores3P() {
                     <td className="px-4 py-3 text-gray-700">{colaborador.funcao || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{colaborador.equipe || '-'}</td>
                     <td className="px-4 py-3 text-gray-700">{colaborador.letra || '-'}</td>
+                    <td className="px-4 py-3 text-gray-700">{colaborador.dataRealizacao3p || '-'}</td>
                     <td className="px-4 py-3 text-center">
                       <span
                         className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${

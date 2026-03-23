@@ -119,6 +119,7 @@ export default function AvaliarDesvios() {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
         status: 'Aguardando Avaliação', // Apenas desvios aguardando avaliação
+        apenas_equipes_supervisionadas: 'true',
         ...Object.fromEntries(
           Object.entries(filters).filter(([, value]) => value !== '')
         )
@@ -779,3 +780,4 @@ export default function AvaliarDesvios() {
       </div>
   )
 }
+

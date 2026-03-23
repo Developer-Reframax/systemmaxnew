@@ -20,6 +20,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { PDFService } from '@/lib/services/pdfService'
+import { formatDateTimeFromDatabase } from '@/lib/datetime'
 
 interface OAC {
   id: string
@@ -193,13 +194,7 @@ export default function HistoricoOacPage() {
   }
 
   const formatDateTime = (dateString: string) => {
-    return new Date(dateString).toLocaleString('pt-BR', {
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    })
+    return formatDateTimeFromDatabase(dateString)
   }
 
   const formatDuration = (minutes: number) => {
