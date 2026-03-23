@@ -103,7 +103,7 @@ export async function PUT(
       )
     }
 
-    if (existingDesvio.status !== 'Aguardando Avaliação') {
+    if (existingDesvio.status !== 'Aguardando AvaliaÃ§Ã£o') {
       return NextResponse.json(
         { success: false, message: 'Este desvio nao esta aguardando avaliacao' },
         { status: 400 }
@@ -302,3 +302,4 @@ export async function GET(
     )
   }
 }
+
