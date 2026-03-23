@@ -139,6 +139,72 @@ function ContinuarExecucaoPage() {
     });
   }, [execucaoData.respostas, execucaoExistente]);
 
+  const getApiErrorMessage = useCallback(async (response: Response, fallbackMessage: string) => {
+    try {
+      const data = await response.json();
+      if (typeof data?.error === 'string' && data.error.trim()) return data.error;
+      if (typeof data?.message === 'string' && data.message.trim()) return data.message;
+    } catch {
+      try {
+        const text = await response.text();
+        if (text.trim()) return text;
+      } catch {
+        // ignore
+      }
+    }
+
+    return fallbackMessage;
+  }, []);
+
+  const redirecionarParaLogin = useCallback((message?: string) => {
+    const callbackUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.pathname}${window.location.search}`
+        : `/inspecoes/execucoes/continuar/${execucaoId}`;
+
+    toast.error(message || 'Sessao expirada. Faca login novamente.');
+    router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+  }, [execucaoId, router]);
+
+  const fetchComCookie = useCallback(async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    unauthorizedMessage?: string
+  ) => {
+    const response = await fetch(input, {
+      credentials: 'include',
+      ...init,
+    });
+
+    if (response.status === 401) {
+      const message = await getApiErrorMessage(
+        response,
+        unauthorizedMessage || 'Sessao expirada. Faca login novamente.'
+      );
+      redirecionarParaLogin(message);
+      return null;
+    }
+
+    return response;
+  }, [getApiErrorMessage, redirecionarParaLogin]);
+
+  const montarPayloadExecucao = useCallback((
+    status: 'em_andamento' | 'concluida',
+    concluir = false
+  ) => ({
+    local_id: execucaoData.local_id,
+    data_inicio: execucaoData.data_inicio,
+    equipamento_tag: execucaoData.equipamento_tag || null,
+    participantes: execucaoData.participantes,
+    respostas: execucaoData.respostas.map((r) => ({
+      pergunta_id: r.pergunta_id,
+      resposta: r.valor,
+      observacoes: r.observacao || null
+    })),
+    status,
+    ...(concluir ? { concluir: true } : {})
+  }), [execucaoData]);
+
   const adicionarParticipante = (matricula: string) => {
     setExecucaoData(prev => ({
       ...prev,
@@ -177,9 +243,11 @@ function ContinuarExecucaoPage() {
   const buscarPlanosExistentes = useCallback(async () => {
     try {
 
-      const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
+      const response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar planos de acao.');
+
+      if (!response) return;
 
       if (response.ok) {
         const data = await response.json();
@@ -188,7 +256,7 @@ function ContinuarExecucaoPage() {
     } catch (error) {
       console.error('Erro ao buscar planos:', error);
     }
-  }, [execucaoId]);
+  }, [execucaoId, fetchComCookie]);
 
   // Obter planos de uma pergunta específica
   const obterPlanosPorPergunta = (perguntaId: string) => {
@@ -238,12 +306,12 @@ function ContinuarExecucaoPage() {
   const fetchExecucaoExistente = useCallback(async () => {
     if (!execucaoId) return;
     try {
-
-      const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}`, {
+      const response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoId}`, {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar execucao.');
+      if (!response) return;
       if (!response.ok) {
-        throw new Error('Erro ao carregar execução');
+        throw new Error(await getApiErrorMessage(response, 'Erro ao carregar execução'));
       }
 
       const data = await response.json() as { data: ExecucaoExistente & { tag_equipamento?: string } };
@@ -271,13 +339,13 @@ function ContinuarExecucaoPage() {
 
       setExecucaoExistente({ ...execucao, formulario: formularioNormalizado, equipamento_tag: equipamentoTag });
 
-      // Buscar formulário completo para garantir flags permite_*
       try {
         const formId = execucao?.formulario?.id;
         if (formId) {
-          const formResp = await fetch(`/api/inspecoes/formularios/${formId}`, {
+          const formResp = await fetchComCookie(`/api/inspecoes/formularios/${formId}`, {
             method: 'GET'
-          });
+          }, 'Sessao expirada ao carregar formulario.');
+          if (!formResp) return;
           if (formResp.ok) {
             const formData = await formResp.json();
             const formularioCompleto = formData?.data ?? formData;
@@ -301,7 +369,6 @@ function ContinuarExecucaoPage() {
         console.warn('Não foi possível carregar formulário completo:', e);
       }
 
-      // Pré-preencher dados
       setExecucaoData({
         local_id: execucao.local?.id ?? '',
         data_inicio: execucao.data_inicio || new Date().toISOString(),
@@ -314,7 +381,6 @@ function ContinuarExecucaoPage() {
         }))
       });
 
-      // Determinar etapa atual baseada no progresso
       if (execucao.respostas && execucao.respostas.length > 0) {
         setEtapaAtual('perguntas');
       } else if (execucao.participantes && execucao.participantes.length > 0) {
@@ -325,18 +391,19 @@ function ContinuarExecucaoPage() {
 
     } catch (error) {
       console.error('Erro ao carregar execução:', error);
-      toast.error('Erro ao carregar execução');
+      toast.error(error instanceof Error ? error.message : 'Erro ao carregar execução');
       router.push('/inspecoes/execucoes');
     }
-  }, [execucaoId, router]);
+  }, [execucaoId, fetchComCookie, getApiErrorMessage, router]);
 
   // Carregar locais
   const fetchLocais = useCallback(async () => {
     try {
-
-      const response = await fetch('/api/inspecoes/locais?limit=100', {
+      const response = await fetchComCookie('/api/inspecoes/locais?limit=100', {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar locais.');
+
+      if (!response) return;
 
       if (response.ok) {
         const data = await response.json();
@@ -345,16 +412,17 @@ function ContinuarExecucaoPage() {
     } catch (error) {
       console.error('Erro ao carregar locais:', error);
     }
-  }, []);
+  }, [fetchComCookie]);
 
   // Carregar usuários
   const fetchUsuarios = useCallback(async () => {
     try {
-
       const searchParam = searchUsuarios ? `&search=${encodeURIComponent(searchUsuarios)}` : '';
-      const response = await fetch(`/api/inspecoes/usuarios?limit=50${searchParam}`, {
+      const response = await fetchComCookie(`/api/inspecoes/usuarios?limit=50${searchParam}`, {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar usuarios.');
+
+      if (!response) return;
 
       if (response.ok) {
         const data = await response.json();
@@ -363,7 +431,7 @@ function ContinuarExecucaoPage() {
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
     }
-  }, [searchUsuarios]);
+  }, [searchUsuarios, fetchComCookie]);
 
   const fetchEquipamentos = useCallback(async () => {
     if (!execucaoExistente?.formulario?.check_list) return;
@@ -373,9 +441,11 @@ function ContinuarExecucaoPage() {
       const params = new URLSearchParams();
       if (equipamentoSearch) params.append('search', equipamentoSearch);
 
-      const response = await fetch(`/api/inspecoes/equipamentos?${params.toString()}`, {
+      const response = await fetchComCookie(`/api/inspecoes/equipamentos?${params.toString()}`, {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar equipamentos.');
+
+      if (!response) return;
 
       if (response.ok) {
         const data = await response.json();
@@ -386,7 +456,7 @@ function ContinuarExecucaoPage() {
     } finally {
       setEquipamentosLoading(false);
     }
-  }, [equipamentoSearch, execucaoExistente?.formulario?.check_list]);
+  }, [equipamentoSearch, execucaoExistente?.formulario?.check_list, fetchComCookie]);
 
   useEffect(() => {
     const loadData = async () => {
@@ -418,31 +488,24 @@ function ContinuarExecucaoPage() {
 
     setSaving(true);
     try {
-
-      const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}`, {
+      const response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoId}`, {
         method: 'PUT',
-        body: JSON.stringify({
-          local_id: execucaoData.local_id,
-          data_inicio: execucaoData.data_inicio,
-          equipamento_tag: execucaoData.equipamento_tag || null,
-          participantes: execucaoData.participantes,
-          respostas: execucaoData.respostas.map(r => ({
-            pergunta_id: r.pergunta_id,
-            resposta: r.valor,
-            observacoes: r.observacao || null
-          })),
-          status: 'em_andamento'
-        }),
-      });
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(montarPayloadExecucao('em_andamento')),
+      }, 'Sessao expirada ao salvar rascunho.');
 
-      if (response.ok) {
-        toast.success('Rascunho salvo com sucesso!');
-      } else {
-        throw new Error('Erro ao salvar rascunho');
+      if (!response) return;
+
+      if (!response.ok) {
+        throw new Error(await getApiErrorMessage(response, 'Erro ao salvar rascunho'));
       }
+
+      toast.success('Rascunho salvo com sucesso!');
     } catch (error) {
       console.error('Erro ao salvar rascunho:', error);
-      toast.error('Erro ao salvar rascunho');
+      toast.error(error instanceof Error ? error.message : 'Erro ao salvar rascunho');
     } finally {
       setSaving(false);
     }
@@ -459,18 +522,17 @@ function ContinuarExecucaoPage() {
       return;
     }
 
-    // Verificar se existem perguntas "Não Conforme" sem planos de ação
     const perguntasNaoConforme = execucaoData.respostas.filter(r => r.valor === 'nao_conforme');
     if (perguntasNaoConforme.length > 0) {
       try {
-
-        // Buscar planos de ação existentes
-        const planosResponse = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
+        const planosResponse = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
           method: 'GET'
-        });
+        }, 'Sessao expirada ao verificar planos de acao.');
+
+        if (!planosResponse) return;
 
         if (!planosResponse.ok) {
-          toast.error('Erro ao verificar planos de ação');
+          toast.error(await getApiErrorMessage(planosResponse, 'Erro ao verificar planos de ação'));
           return;
         }
 
@@ -490,33 +552,25 @@ function ContinuarExecucaoPage() {
 
     setSaving(true);
     try {
-
-      const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}`, {
+      const response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoId}`, {
         method: 'PUT',
-        body: JSON.stringify({
-          local_id: execucaoData.local_id,
-          data_inicio: execucaoData.data_inicio,
-          equipamento_tag: execucaoData.equipamento_tag || null,
-          participantes: execucaoData.participantes,
-          respostas: execucaoData.respostas.map(r => ({
-            pergunta_id: r.pergunta_id,
-            resposta: r.valor,
-            observacoes: r.observacao || null
-          })),
-          status: 'concluida',
-          concluir: true
-        }),
-      });
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(montarPayloadExecucao('concluida', true)),
+      }, 'Sessao expirada ao finalizar execucao.');
 
-      if (response.ok) {
-        toast.success('Execução finalizada com sucesso!');
-        router.push(`/inspecoes/execucoes/${execucaoId}`);
-      } else {
-        throw new Error('Erro ao finalizar execução');
+      if (!response) return;
+
+      if (!response.ok) {
+        throw new Error(await getApiErrorMessage(response, 'Erro ao finalizar execução'));
       }
+
+      toast.success('Execução finalizada com sucesso!');
+      router.push(`/inspecoes/execucoes/${execucaoId}`);
     } catch (error) {
       console.error('Erro ao finalizar execução:', error);
-      toast.error('Erro ao finalizar execução');
+      toast.error(error instanceof Error ? error.message : 'Erro ao finalizar execução');
     } finally {
       setSaving(false);
     }

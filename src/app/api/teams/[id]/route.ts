@@ -1,45 +1,66 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyJWTToken } from '@/lib/jwt-middleware';
+import { userHasFunctionality } from '@/lib/permissions-server';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const TEAMS_MANAGE_FUNCTIONALITY_SLUG = 'equipes-gestao';
+
+type AuthenticatedUser = NonNullable<Awaited<ReturnType<typeof verifyJWTToken>>['user']>;
+
+async function hasTeamsManagementPermission(user: AuthenticatedUser) {
+  try {
+    return await userHasFunctionality(user, TEAMS_MANAGE_FUNCTIONALITY_SLUG);
+  } catch (error) {
+    console.error('Erro ao verificar funcionalidade equipes-gestao:', error);
+    return false;
+  }
+}
+
+async function getUserContract(matricula: number | string) {
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select('contrato_raiz')
+    .eq('matricula', matricula)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.contrato_raiz;
+}
+
 // PUT - Atualizar equipe
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const authResult = await verifyJWTToken(request)
+    const authResult = await verifyJWTToken(request);
     if (!authResult.success || !authResult.user) {
-      return NextResponse.json({ error: authResult.error || 'Usuário não autenticado' }, { status: 401 })
+      return NextResponse.json({ error: authResult.error || 'Usuario nao autenticado' }, { status: 401 });
     }
 
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!['Admin', 'Editor'].includes(authResult.user.role)) {
-      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    const hasPermission = await hasTeamsManagementPermission(authResult.user);
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
-    // Buscar o contrato_raiz do usuário logado
-    const { data: userData, error: userError } = await supabase
-      .from('usuarios')
-      .select('contrato_raiz')
-      .eq('matricula', authResult.user.matricula)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    const contratoRaiz = await getUserContract(authResult.user.matricula);
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Usuario nao encontrado' }, { status: 404 });
     }
 
-    const body = await request.json()
-    const { equipe, supervisor } = body
-    const { id } = await params
+    const body = await request.json();
+    const { equipe, supervisor } = body;
+    const { id } = await params;
 
     if (!equipe || !supervisor) {
-      return NextResponse.json({ error: 'Equipe e supervisor são obrigatórios' }, { status: 400 })
+      return NextResponse.json({ error: 'Equipe e supervisor sao obrigatorios' }, { status: 400 });
     }
 
-    // Verificar se a equipe pertence ao mesmo contrato_raiz do usuário
     const { data: equipeExistente, error: equipeError } = await supabase
       .from('equipes')
       .select('codigo_contrato')
@@ -47,22 +68,20 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       .single();
 
     if (equipeError || !equipeExistente) {
-      return NextResponse.json({ error: 'Equipe não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Equipe nao encontrada' }, { status: 404 });
     }
 
-    if (equipeExistente.codigo_contrato !== userData.contrato_raiz) {
-      return NextResponse.json({ error: 'Você não tem permissão para editar esta equipe' }, { status: 403 });
+    if (equipeExistente.codigo_contrato !== contratoRaiz) {
+      return NextResponse.json({ error: 'Voce nao tem permissao para editar esta equipe' }, { status: 403 });
     }
 
-    // Converter equipe para caixa alta
-    const equipeUpperCase = equipe.toUpperCase();
+    const equipeUpperCase = String(equipe).toUpperCase();
 
-    // Verificar se já existe outra equipe com o mesmo nome no mesmo contrato
     const { data: existingEquipe, error: checkError } = await supabase
       .from('equipes')
       .select('id')
       .eq('equipe', equipeUpperCase)
-      .eq('codigo_contrato', userData.contrato_raiz)
+      .eq('codigo_contrato', contratoRaiz)
       .neq('id', id)
       .single();
 
@@ -71,15 +90,14 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     if (existingEquipe) {
-      return NextResponse.json({ error: 'Já existe uma equipe com este nome' }, { status: 400 });
+      return NextResponse.json({ error: 'Ja existe uma equipe com este nome' }, { status: 400 });
     }
 
-    // Atualizar equipe
     const { data: equipeAtualizada, error } = await supabase
       .from('equipes')
       .update({
         equipe: equipeUpperCase,
-        supervisor: supervisor
+        supervisor
       })
       .eq('id', id)
       .select()
@@ -98,30 +116,23 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 // DELETE - Excluir equipe
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const authResult = await verifyJWTToken(request)
+    const authResult = await verifyJWTToken(request);
     if (!authResult.success || !authResult.user) {
-      return NextResponse.json({ error: authResult.error || 'Usuário não autenticado' }, { status: 401 })
+      return NextResponse.json({ error: authResult.error || 'Usuario nao autenticado' }, { status: 401 });
     }
 
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!['Admin', 'Editor'].includes(authResult.user.role)) {
-      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    const hasPermission = await hasTeamsManagementPermission(authResult.user);
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
-    // Buscar o contrato_raiz do usuário logado
-    const { data: userData, error: userError } = await supabase
-      .from('usuarios')
-      .select('contrato_raiz')
-      .eq('matricula', authResult.user.matricula)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    const contratoRaiz = await getUserContract(authResult.user.matricula);
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Usuario nao encontrado' }, { status: 404 });
     }
 
-    const { id } = await params
+    const { id } = await params;
 
-    // Verificar se a equipe pertence ao mesmo contrato_raiz do usuário
     const { data: equipeExistente, error: equipeError } = await supabase
       .from('equipes')
       .select('codigo_contrato')
@@ -129,14 +140,13 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       .single();
 
     if (equipeError || !equipeExistente) {
-      return NextResponse.json({ error: 'Equipe não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Equipe nao encontrada' }, { status: 404 });
     }
 
-    if (equipeExistente.codigo_contrato !== userData.contrato_raiz) {
-      return NextResponse.json({ error: 'Você não tem permissão para excluir esta equipe' }, { status: 403 });
+    if (equipeExistente.codigo_contrato !== contratoRaiz) {
+      return NextResponse.json({ error: 'Voce nao tem permissao para excluir esta equipe' }, { status: 403 });
     }
 
-    // Excluir equipe
     const { error } = await supabase
       .from('equipes')
       .delete()
@@ -146,7 +156,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ message: 'Equipe excluída com sucesso' });
+    return NextResponse.json({ message: 'Equipe excluida com sucesso' });
   } catch {
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
