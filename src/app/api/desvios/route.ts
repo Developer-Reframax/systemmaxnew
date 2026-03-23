@@ -1,11 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWTToken } from '@/lib/jwt-middleware'
+import { getUserPermissions } from '@/lib/permissions-server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
+const SESMT_FUNCTIONALITY_SLUG = 'relatos-sesmt'
+
+async function userHasSesmtPermission(
+  user: NonNullable<Awaited<ReturnType<typeof verifyJWTToken>>['user']>
+) {
+  try {
+    const permissions = await getUserPermissions(user)
+    if (!permissions) {
+      return false
+    }
+
+    return permissions.modulos.some((modulo) =>
+      modulo.funcionalidades.some(
+        (funcionalidade) => funcionalidade.slug === SESMT_FUNCTIONALITY_SLUG
+      )
+    )
+  } catch (error) {
+    console.error('Erro ao verificar permissao relatos-sesmt:', error)
+    return false
+  }
+}
 
 // GET - Listar desvios
 export async function GET(request: NextRequest) {
@@ -75,40 +97,47 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      const { data: equipesSupervisionadas, error: equipesError } = await supabase
-        .from('equipes')
-        .select('id')
-        .eq('codigo_contrato', userContract)
-        .in('supervisor', [matricula, String(matricula)])
+      const hasSesmtPermission = authResult.user
+        ? await userHasSesmtPermission(authResult.user)
+        : false
 
-      if (equipesError) {
-        console.error('Erro ao buscar equipes supervisionadas:', equipesError)
-        return NextResponse.json(
-          { success: false, message: 'Erro ao buscar equipes supervisionadas' },
-          { status: 500 }
-        )
-      }
+      // Usuario com relatos-sesmt pode avaliar qualquer desvio do contrato sem filtro por equipe.
+      if (!hasSesmtPermission) {
+        const { data: equipesSupervisionadas, error: equipesError } = await supabase
+          .from('equipes')
+          .select('id')
+          .eq('codigo_contrato', userContract)
+          .in('supervisor', [matricula, String(matricula)])
 
-      const equipeIds = (equipesSupervisionadas || [])
-        .map((equipe) => equipe.id)
-        .filter(Boolean)
+        if (equipesError) {
+          console.error('Erro ao buscar equipes supervisionadas:', equipesError)
+          return NextResponse.json(
+            { success: false, message: 'Erro ao buscar equipes supervisionadas' },
+            { status: 500 }
+          )
+        }
 
-      if (equipeIds.length === 0) {
-        return NextResponse.json({
-          success: true,
-          data: [],
-          total: 0,
-          pagination: {
-            page,
-            limit,
+        const equipeIds = (equipesSupervisionadas || [])
+          .map((equipe) => equipe.id)
+          .filter(Boolean)
+
+        if (equipeIds.length === 0) {
+          return NextResponse.json({
+            success: true,
+            data: [],
             total: 0,
-            totalPages: 0
-          }
-        })
-      }
+            pagination: {
+              page,
+              limit,
+              total: 0,
+              totalPages: 0
+            }
+          })
+        }
 
-      query = query.in('equipe_id', equipeIds)
-      countQuery = countQuery.in('equipe_id', equipeIds)
+        query = query.in('equipe_id', equipeIds)
+        countQuery = countQuery.in('equipe_id', equipeIds)
+      }
     }
 
     // Aplicar filtros

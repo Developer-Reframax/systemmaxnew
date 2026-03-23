@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { toast } from 'sonner'
 import AvaliacaoConversacional from '@/components/desvios/AvaliacaoConversacional'
+import { usePermissions } from '@/contexts/PermissionsContext'
 
 
 interface Desvio {
@@ -70,6 +71,15 @@ interface AvaliacaoModal {
 
 export default function AvaliarDesvios() {
   const { user } = useAuth()
+  const { permissions, loading: permissionsLoading } = usePermissions()
+  const SESMT_FUNC_SLUG = 'relatos-sesmt'
+  const SUPERVISOR_FUNC_SLUG = 'relatos-supervisor'
+  const hasPermissionSlug = (slug: string) =>
+    !!permissions?.modulos.some((modulo) =>
+      modulo.funcionalidades.some((funcionalidade) => funcionalidade.slug === slug)
+    )
+  const canAccessSesmt = hasPermissionSlug(SESMT_FUNC_SLUG)
+  const canAccessSupervisor = hasPermissionSlug(SUPERVISOR_FUNC_SLUG)
   const [desvios, setDesvios] = useState<Desvio[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [loading, setLoading] = useState(false)
@@ -111,6 +121,10 @@ export default function AvaliarDesvios() {
   })
 
   const loadDesvios = useCallback(async () => {
+    if (permissionsLoading) {
+      return
+    }
+
     try {
       setLoading(true)
      
@@ -119,11 +133,14 @@ export default function AvaliarDesvios() {
         page: pagination.page.toString(),
         limit: pagination.limit.toString(),
         status: 'Aguardando Avaliação', // Apenas desvios aguardando avaliação
-        apenas_equipes_supervisionadas: 'true',
         ...Object.fromEntries(
           Object.entries(filters).filter(([, value]) => value !== '')
         )
       })
+
+      if (!canAccessSesmt && canAccessSupervisor) {
+        params.set('apenas_equipes_supervisionadas', 'true')
+      }
 
       const response = await fetch(`/api/desvios?${params}`, {
         method: 'GET'
@@ -153,7 +170,7 @@ export default function AvaliarDesvios() {
       setLoading(false)
       setInitialLoad(false)
     }
-  }, [pagination.page, pagination.limit, filters])
+  }, [pagination.page, pagination.limit, filters, canAccessSesmt, canAccessSupervisor, permissionsLoading])
 
   useEffect(() => {
     loadDesvios()
@@ -304,7 +321,19 @@ export default function AvaliarDesvios() {
   }
 
   // Verificar se usuário tem permissão para avaliar
-  const canEvaluate = user?.role === 'Admin' || user?.role === 'Editor'
+  const canEvaluate =
+    user?.role === 'Admin' ||
+    user?.role === 'Editor' ||
+    canAccessSupervisor ||
+    canAccessSesmt
+
+  if (permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-orange-600"></div>
+      </div>
+    )
+  }
 
   if (!canEvaluate) {
     return (
