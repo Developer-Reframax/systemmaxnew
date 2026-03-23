@@ -109,3 +109,19 @@ export async function getUserPermissions(
 
   return { modulos }
 }
+
+export async function userHasFunctionality(
+  user: AuthUser,
+  functionalitySlug: string,
+  contractCodeOverride?: string
+): Promise<boolean> {
+  const permissions = await getUserPermissions(user, contractCodeOverride)
+
+  if (!permissions) {
+    return false
+  }
+
+  return permissions.modulos.some((modulo) =>
+    modulo.funcionalidades.some((funcionalidade) => funcionalidade.slug === functionalitySlug)
+  )
+}

@@ -1,36 +1,62 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyJWTToken } from '@/lib/jwt-middleware';
+import { userHasFunctionality } from '@/lib/permissions-server';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET - Buscar líderes do mesmo contrato_raiz
+const LETTERS_MANAGE_FUNCTIONALITY_SLUG = 'letras-gestao';
+
+type AuthenticatedUser = NonNullable<Awaited<ReturnType<typeof verifyJWTToken>>['user']>;
+
+async function hasLettersManagementPermission(user: AuthenticatedUser) {
+  try {
+    return await userHasFunctionality(user, LETTERS_MANAGE_FUNCTIONALITY_SLUG);
+  } catch (error) {
+    console.error('Erro ao verificar funcionalidade letras-gestao:', error);
+    return false;
+  }
+}
+
+async function getUserContract(matricula: number | string) {
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select('contrato_raiz')
+    .eq('matricula', matricula)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.contrato_raiz;
+}
+
+// GET - Buscar lideres do mesmo contrato_raiz
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await verifyJWTToken(request)
+    const authResult = await verifyJWTToken(request);
     if (!authResult.success || !authResult.user) {
-      return NextResponse.json({ error: authResult.error || 'Usuário não autenticado' }, { status: 401 })
+      return NextResponse.json({ error: authResult.error || 'Usuario nao autenticado' }, { status: 401 });
     }
 
-    // Buscar o contrato_raiz do usuário logado
-    const { data: userData, error: userError } = await supabase
-      .from('usuarios')
-      .select('contrato_raiz')
-      .eq('matricula', authResult.user.matricula)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    const hasPermission = await hasLettersManagementPermission(authResult.user);
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
-    // Buscar usuários com o mesmo contrato_raiz
+    const contratoRaiz = await getUserContract(authResult.user.matricula);
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Usuario nao encontrado' }, { status: 404 });
+    }
+
     const { data: lideres, error } = await supabase
       .from('usuarios')
       .select('matricula, nome')
-      .eq('contrato_raiz', userData.contrato_raiz)
+      .eq('contrato_raiz', contratoRaiz)
       .eq('status', 'ativo')
       .order('nome', { ascending: true });
 
@@ -39,7 +65,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(lideres);
-  } catch  {
+  } catch {
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }

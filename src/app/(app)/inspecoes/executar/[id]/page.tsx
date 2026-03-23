@@ -114,7 +114,6 @@ function ExecutarFormularioPage() {
   const execucaoId = searchParams?.get('execucao_id');
   const [isContinuandoExecucao, setIsContinuandoExecucao] = useState(false);
   const [execucaoCriadaId, setExecucaoCriadaId] = useState<string>('');
-  const [tentativaCriacaoParaLocal, setTentativaCriacaoParaLocal] = useState<string>('');
   const [autoSaveTimeout, setAutoSaveTimeout] = useState<NodeJS.Timeout | null>(null);
   const [equipamentos, setEquipamentos] = useState<{ id: string; tag: string; nome: string }[]>([]);
   const [equipamentoSearch, setEquipamentoSearch] = useState('');
@@ -133,6 +132,7 @@ function ExecutarFormularioPage() {
   const [planoModalOpen, setPlanoModalOpen] = useState(false);
   const [perguntaIdCriandoPlano, setPerguntaIdCriandoPlano] = useState<string | undefined>(undefined);
   const [planosExistentes, setPlanosExistentes] = useState<PlanoAcaoWithRelations[]>([]);
+  const execucaoIdAtual = execucaoId || execucaoCriadaId;
   const existeImpeditivaNaoConforme = useMemo(() => {
     if (!formulario?.check_list) return false;
     return execucaoData.respostas.some((resposta) => {
@@ -145,12 +145,81 @@ function ExecutarFormularioPage() {
   // Removido: checagem agregada de existência de planos (estado não utilizado)
 
   // Buscar planos de ação existentes desta execução
+  const getApiErrorMessage = useCallback(async (response: Response, fallbackMessage: string) => {
+    try {
+      const data = await response.json();
+      if (typeof data?.error === 'string' && data.error.trim()) return data.error;
+      if (typeof data?.message === 'string' && data.message.trim()) return data.message;
+    } catch {
+      try {
+        const text = await response.text();
+        if (text.trim()) return text;
+      } catch {
+        // ignore
+      }
+    }
+
+    return fallbackMessage;
+  }, []);
+
+  const redirecionarParaLogin = useCallback((message?: string) => {
+    const callbackUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.pathname}${window.location.search}`
+        : `/inspecoes/executar/${params?.id ?? ''}`;
+
+    toast.error(message || 'Sessao expirada. Faca login novamente.');
+    router.push(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+  }, [params?.id, router]);
+
+  const fetchComCookie = useCallback(async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    unauthorizedMessage?: string
+  ) => {
+    const response = await fetch(input, {
+      credentials: 'include',
+      ...init,
+    });
+
+    if (response.status === 401) {
+      const message = await getApiErrorMessage(
+        response,
+        unauthorizedMessage || 'Sessao expirada. Faca login novamente.'
+      );
+      redirecionarParaLogin(message);
+      return null;
+    }
+
+    return response;
+  }, [getApiErrorMessage, redirecionarParaLogin]);
+
+  const montarPayloadExecucao = useCallback((
+    status: 'em_andamento' | 'concluida',
+    concluir = false
+  ) => ({
+    local_id: execucaoData.local_id,
+    data_inicio: execucaoData.data_inicio,
+    equipamento_tag: execucaoData.equipamento_tag || null,
+    participantes: execucaoData.participantes,
+    respostas: execucaoData.respostas.map((r) => ({
+      pergunta_id: r.pergunta_id,
+      resposta: r.valor,
+      observacoes: r.observacao || null
+    })),
+    status,
+    ...(concluir ? { concluir: true } : {})
+  }), [execucaoData]);
+
   const buscarPlanosExistentes = useCallback(async () => {
     try {
-     
-      const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
+      if (!execucaoIdAtual) return;
+
+      const response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoIdAtual}/planos-acao`, {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar planos de acao.');
+
+      if (!response) return;
 
       if (response.ok) {
         const data = await response.json();
@@ -159,13 +228,13 @@ function ExecutarFormularioPage() {
     } catch (error) {
       console.error('Erro ao buscar planos:', error);
     }
-  }, [execucaoId]);
+  }, [execucaoIdAtual, fetchComCookie]);
 
   useEffect(() => {
-    if (isContinuandoExecucao && execucaoId) {
+    if (isContinuandoExecucao && execucaoIdAtual) {
       buscarPlanosExistentes();
     }
-  }, [buscarPlanosExistentes, isContinuandoExecucao, execucaoId]);
+  }, [buscarPlanosExistentes, isContinuandoExecucao, execucaoIdAtual]);
 
   // Abrir modal para criar plano de ação vinculado à pergunta
   const abrirPlanoModalParaPergunta = (perguntaId: string) => {
@@ -192,84 +261,20 @@ function ExecutarFormularioPage() {
       return resposta && resposta.valor !== '';
     });
   };
-
-  // Função para criar execução inicial (somente quando há local selecionado)
-  const criarExecucaoInicial = useCallback(async () => {
-    try {
-      if (!params?.id || !execucaoData.local_id) return null;
-
-      console.log('Criando execução inicial', {
-        formulario_id: params.id,
-        local_id: execucaoData.local_id,
-        data_inicio: execucaoData.data_inicio,
-        equipamento_tag: execucaoData.equipamento_tag || undefined,
-        status: 'em_andamento'
-      });
-
-      const response = await fetch('/api/inspecoes/execucoes', {
-        method: 'POST',
-        body: JSON.stringify({
-          formulario_id: params.id,
-          local_id: execucaoData.local_id,
-          data_inicio: execucaoData.data_inicio,
-          equipamento_tag: execucaoData.equipamento_tag || null,
-          status: 'em_andamento'
-        }),
-      });
-
-      if (!response.ok) {
-        const status = response.status;
-        let errorMessage = '';
-        try {
-          const errorData = await response.json();
-          errorMessage = errorData?.error || errorData?.message || JSON.stringify(errorData);
-        } catch {
-          try {
-            errorMessage = await response.text();
-          } catch {
-            errorMessage = 'Erro desconhecido';
-          }
-        }
-        console.error('Erro ao criar execução inicial', { status, errorMessage });
-        toast.error(`Erro ao iniciar execução (${status}): ${errorMessage}`);
-        return null;
-      }
-
-      const data = await response.json();
-      const novoExecucaoId = data?.data?.id ?? data?.id;
-      
-      if (novoExecucaoId) {
-        setExecucaoCriadaId(novoExecucaoId);
-        // Atualizar URL com o ID da execução
-        const newUrl = new URL(window.location.href);
-        newUrl.searchParams.set('execucao_id', novoExecucaoId);
-        window.history.replaceState({}, '', newUrl.toString());
-        
-        toast.success('Execução iniciada com sucesso!');
-        return novoExecucaoId;
-      }
-      
-      return null;
-    } catch (error) {
-      console.error('Erro ao criar execução inicial:', error);
-      toast.error('Erro ao iniciar execução');
-      return null;
-    }
-  }, [params?.id, execucaoData.local_id, execucaoData.data_inicio, execucaoData.equipamento_tag]);
-
   const fetchFormulario = useCallback(async () => {
     try {
       setFormularioLoading(true);
-     
-     if (!params?.id) return;
 
-      const response = await fetch(`/api/inspecoes/formularios/${params.id}`, {
+      if (!params?.id) return;
+
+      const response = await fetchComCookie(`/api/inspecoes/formularios/${params.id}`, {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar formulario.');
+
+      if (!response) return;
 
       if (!response.ok) {
         if (response.status === 404) {
-          // Não exibir mensagem antes de terminar o loading; deixar UI tratar quando loading=false
           setFormularioLoading(false);
           setFormulario(null);
           return;
@@ -286,14 +291,13 @@ function ExecutarFormularioPage() {
           impeditivo: p.impeditivo ?? false,
         })),
       });
-      
-      // Inicializar respostas sem seleção prévia
+
       const respostasIniciais = data.data.perguntas.map((pergunta: Pergunta) => ({
         pergunta_id: pergunta.id,
         valor: '' as const,
         observacao: ''
       }));
-      
+
       setExecucaoData(prev => ({
         ...prev,
         respostas: respostasIniciais
@@ -304,31 +308,16 @@ function ExecutarFormularioPage() {
       toast.error('Erro ao carregar formulário');
       setFormularioLoading(false);
     }
-  }, [params?.id]);
-
-  // Criar execução inicial assim que houver local selecionado e ainda não existir execução
-  useEffect(() => {
-    const iniciar = async () => {
-      if (
-        !execucaoId &&
-        !execucaoCriadaId &&
-        execucaoData.local_id &&
-        tentativaCriacaoParaLocal !== execucaoData.local_id
-      ) {
-        setTentativaCriacaoParaLocal(execucaoData.local_id);
-        await criarExecucaoInicial();
-      }
-    };
-    iniciar();
-  }, [execucaoId, execucaoCriadaId, execucaoData.local_id, tentativaCriacaoParaLocal, criarExecucaoInicial]);
-
+  }, [params?.id, fetchComCookie]);
   const fetchLocais = useCallback(async () => {
     try {
       setLocaisLoading(true);
 
-      const response = await fetch('/api/inspecoes/locais?limit=100', {
+      const response = await fetchComCookie('/api/inspecoes/locais?limit=100', {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar locais.');
+
+      if (!response) return;
 
       if (response.ok) {
         const data = await response.json();
@@ -339,15 +328,16 @@ function ExecutarFormularioPage() {
     } finally {
       setLocaisLoading(false);
     }
-  }, []);
+  }, [fetchComCookie]);
 
   const fetchUsuarios = useCallback(async () => {
     try {
-
       const searchParam = searchUsuarios ? `&search=${encodeURIComponent(searchUsuarios)}` : '';
-      const response = await fetch(`/api/inspecoes/usuarios?limit=50${searchParam}`, {
+      const response = await fetchComCookie(`/api/inspecoes/usuarios?limit=50${searchParam}`, {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar usuarios.');
+
+      if (!response) return;
 
       if (response.ok) {
         const data = await response.json();
@@ -356,19 +346,21 @@ function ExecutarFormularioPage() {
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
     }
-  }, [searchUsuarios]);
+  }, [searchUsuarios, fetchComCookie]);
 
   const fetchEquipamentos = useCallback(async () => {
     if (!formulario?.check_list) return;
     try {
       setEquipamentosLoading(true);
-     
+
       const params = new URLSearchParams();
       if (equipamentoSearch) params.append('search', equipamentoSearch);
 
-      const response = await fetch(`/api/inspecoes/equipamentos?${params.toString()}`, {
-       method: 'GET'
-      });
+      const response = await fetchComCookie(`/api/inspecoes/equipamentos?${params.toString()}`, {
+        method: 'GET'
+      }, 'Sessao expirada ao carregar equipamentos.');
+
+      if (!response) return;
 
       if (response.ok) {
         const data = await response.json();
@@ -379,27 +371,28 @@ function ExecutarFormularioPage() {
     } finally {
       setEquipamentosLoading(false);
     }
-  }, [equipamentoSearch, formulario?.check_list]);
+  }, [equipamentoSearch, formulario?.check_list, fetchComCookie]);
 
   const fetchExecucaoExistente = useCallback(async () => {
     if (!execucaoId) return;
-    
+
     try {
       setExecucaoLoading(true);
-    
-      const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}`, {
+
+      const response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoId}`, {
         method: 'GET'
-      });
+      }, 'Sessao expirada ao carregar execucao.');
+
+      if (!response) return;
 
       if (!response.ok) {
-        toast.error('Erro ao carregar execução existente');
+        toast.error(await getApiErrorMessage(response, 'Erro ao carregar execução existente'));
         return;
       }
 
       const data = await response.json();
       const execucao = data.data;
-      
-      // Carregar dados da execução existente
+
       setExecucaoData(prev => ({
         ...prev,
         local_id: execucao.local.id,
@@ -412,14 +405,13 @@ function ExecutarFormularioPage() {
           observacao: r.observacoes || ''
         }))
       }));
-      
+
       setIsContinuandoExecucao(true);
-      
-      // Se já tem respostas, ir direto para a etapa de perguntas
+
       if (execucao.respostas.length > 0) {
         setEtapaAtual('perguntas');
       }
-      
+
       toast.success('Execução carregada com sucesso!');
     } catch (error) {
       console.error('Erro ao carregar execução existente:', error);
@@ -427,7 +419,7 @@ function ExecutarFormularioPage() {
     } finally {
       setExecucaoLoading(false);
     }
-  }, [execucaoId]);
+  }, [execucaoId, fetchComCookie, getApiErrorMessage]);
 
   useEffect(() => {
     fetchFormulario();
@@ -481,24 +473,18 @@ function ExecutarFormularioPage() {
           return;
         }
 
-        // Verificar se existem perguntas "Não Conforme" sem planos de ação
         const perguntasNaoConforme = execucaoData.respostas.filter(r => r.valor === 'nao_conforme');
         if (perguntasNaoConforme.length > 0) {
-          const execucaoIdAtual = execucaoId || execucaoCriadaId;
           if (execucaoIdAtual) {
             try {
-              const token = localStorage.getItem('auth_token');
-              if (!token) return;
+              const planosResponse = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoIdAtual}/planos-acao`, {
+                method: 'GET'
+              }, 'Sessao expirada ao verificar planos de acao.');
 
-              // Buscar planos de ação existentes
-              const planosResponse = await fetch(`/api/inspecoes/execucoes/${execucaoIdAtual}/planos-acao`, {
-                headers: {
-                  'Authorization': `Bearer ${token}`
-                }
-              });
+              if (!planosResponse) return;
 
               if (!planosResponse.ok) {
-                toast.error('Erro ao verificar planos de ação');
+                toast.error(await getApiErrorMessage(planosResponse, 'Erro ao verificar planos de ação'));
                 return;
               }
 
@@ -581,40 +567,26 @@ function ExecutarFormularioPage() {
 
   // Função de auto-save
   const autoSave = useCallback(async () => {
-    const execucaoIdAtual = execucaoId || execucaoCriadaId;
     if (!execucaoIdAtual) return;
 
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) return;
-
-      const response = await fetch(`/api/inspecoes/execucoes/${execucaoIdAtual}`, {
+      const response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoIdAtual}`, {
         method: 'PUT',
         headers: {
-          'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          local_id: execucaoData.local_id,
-          data_inicio: execucaoData.data_inicio,
-          equipamento_tag: execucaoData.equipamento_tag || null,
-          participantes: execucaoData.participantes,
-          respostas: execucaoData.respostas.map(r => ({
-            pergunta_id: r.pergunta_id,
-            resposta: r.valor,
-            observacoes: r.observacao || null
-          })),
-          status: 'em_andamento'
-        }),
-      });
+        body: JSON.stringify(montarPayloadExecucao('em_andamento')),
+      }, 'Sessao expirada ao salvar automaticamente.');
+
+      if (!response) return;
 
       if (!response.ok) {
-        console.error('Erro no auto-save');
+        console.error('Erro no auto-save:', await getApiErrorMessage(response, 'Erro no auto-save'));
       }
     } catch (error) {
       console.error('Erro no auto-save:', error);
     }
-  }, [execucaoId, execucaoCriadaId, execucaoData]);
+  }, [execucaoIdAtual, fetchComCookie, getApiErrorMessage, montarPayloadExecucao]);
 
   const atualizarResposta = (perguntaId: string, campo: 'valor' | 'observacao', valor: string) => {
     setExecucaoData(prev => {
@@ -670,68 +642,38 @@ function ExecutarFormularioPage() {
   const salvarRascunho = async () => {
     setSaving(true);
     try {
-      const token = localStorage.getItem('auth_token');
-      if (!token) {
-        toast.error('Sessao expirada. Faca login novamente.');
-        return;
-      }
-
       let response;
-      const execucaoIdAtual = execucaoId || execucaoCriadaId;
-      // Validar local antes de salvar/criar
+
       if (!execucaoData.local_id) {
         toast.error('Selecione um local antes de salvar');
         return;
       }
-      
+
       if (execucaoIdAtual) {
-        // Atualizar execucao existente
-        response = await fetch(`/api/inspecoes/execucoes/${execucaoIdAtual}`, {
+        response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoIdAtual}`, {
           method: 'PUT',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-         body: JSON.stringify({
-           local_id: execucaoData.local_id,
-           data_inicio: execucaoData.data_inicio,
-           equipamento_tag: execucaoData.equipamento_tag || null,
-           participantes: execucaoData.participantes,
-           respostas: execucaoData.respostas.map(r => ({
-             pergunta_id: r.pergunta_id,
-             resposta: r.valor,
-             observacoes: r.observacao || null
-            })),
-            status: 'em_andamento'
-          }),
-        });
+          body: JSON.stringify(montarPayloadExecucao('em_andamento')),
+        }, 'Sessao expirada ao salvar rascunho.');
       } else {
-        // Criar nova execucao
-        response = await fetch('/api/inspecoes/execucoes', {
+        response = await fetchComCookie('/api/inspecoes/execucoes', {
           method: 'POST',
           headers: {
-            'Authorization': `Bearer ${token}`,
             'Content-Type': 'application/json',
           },
-         body: JSON.stringify({
-           formulario_id: params?.id,
-           local_id: execucaoData.local_id,
-           data_inicio: execucaoData.data_inicio,
-           equipamento_tag: execucaoData.equipamento_tag || null,
-           participantes: execucaoData.participantes,
-           respostas: execucaoData.respostas.map(r => ({
-             pergunta_id: r.pergunta_id,
-             resposta: r.valor,
-             observacoes: r.observacao || null
-            })),
-            status: 'em_andamento'
+          body: JSON.stringify({
+            formulario_id: params?.id,
+            ...montarPayloadExecucao('em_andamento')
           }),
-        });
+        }, 'Sessao expirada ao salvar rascunho.');
       }
 
+      if (!response) return;
+
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Erro ao salvar rascunho');
+        throw new Error(await getApiErrorMessage(response, 'Erro ao salvar rascunho'));
       }
 
       if (!execucaoIdAtual) {
@@ -759,7 +701,6 @@ function ExecutarFormularioPage() {
   };
 
   const finalizarExecucao = async () => {
-     // Validar respostas (todas obrigatórias)
      if (formulario) {
        const totalPerguntas = formulario.perguntas.length;
        const totalRespondidas = execucaoData.respostas.filter(r => r.valor !== '').length;
@@ -770,22 +711,18 @@ function ExecutarFormularioPage() {
        }
      }
  
-     // Verificar se existem perguntas "Não Conforme" sem planos de ação
      const perguntasNaoConforme = execucaoData.respostas.filter(r => r.valor === 'nao_conforme');
      if (perguntasNaoConforme.length > 0) {
-       const token = localStorage.getItem('auth_token');
-       if (!token) return;
- 
-       if (isContinuandoExecucao && execucaoId) {
+       if (execucaoIdAtual) {
          try {
-           const planosResponse = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
-             headers: {
-               'Authorization': `Bearer ${token}`
-             }
-           });
+           const planosResponse = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoIdAtual}/planos-acao`, {
+             method: 'GET'
+           }, 'Sessao expirada ao verificar planos de acao.');
+ 
+           if (!planosResponse) return;
  
            if (!planosResponse.ok) {
-             toast.error('Erro ao verificar planos de ação');
+             toast.error(await getApiErrorMessage(planosResponse, 'Erro ao verificar planos de ação'));
              return;
            }
  
@@ -809,66 +746,39 @@ function ExecutarFormularioPage() {
  
      setSaving(true);
      try {
-       const token = localStorage.getItem('auth_token');
-       if (!token) return;
- 
        let response;
-       let execucaoFinalId = execucaoId;
+       let execucaoFinalId = execucaoIdAtual;
        
-       if (isContinuandoExecucao && execucaoId) {
-         // Finalizar execução existente
-         response = await fetch(`/api/inspecoes/execucoes/${execucaoId}`, {
+       if (execucaoIdAtual) {
+         response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoIdAtual}`, {
            method: 'PUT',
            headers: {
-             'Authorization': `Bearer ${token}`,
              'Content-Type': 'application/json',
            },
-          body: JSON.stringify({
-            local_id: execucaoData.local_id,
-            data_inicio: execucaoData.data_inicio,
-            equipamento_tag: execucaoData.equipamento_tag || null,
-            participantes: execucaoData.participantes,
-            respostas: execucaoData.respostas.map(r => ({
-              pergunta_id: r.pergunta_id,
-              resposta: r.valor,
-              observacoes: r.observacao || null
-             })),
-             status: 'concluida',
-             concluir: true
-           }),
-         });
+           body: JSON.stringify(montarPayloadExecucao('concluida', true)),
+         }, 'Sessao expirada ao finalizar execucao.');
        } else {
-         // Criar nova execução finalizada
-         response = await fetch('/api/inspecoes/execucoes', {
+         response = await fetchComCookie('/api/inspecoes/execucoes', {
            method: 'POST',
            headers: {
-             'Authorization': `Bearer ${token}`,
              'Content-Type': 'application/json',
            },
            body: JSON.stringify({
-            formulario_id: params?.id,
-            local_id: execucaoData.local_id,
-            data_inicio: execucaoData.data_inicio,
-            equipamento_tag: execucaoData.equipamento_tag || null,
-            participantes: execucaoData.participantes,
-            respostas: execucaoData.respostas.map(r => ({
-              pergunta_id: r.pergunta_id,
-              resposta: r.valor,
-              observacoes: r.observacao || null
-             })),
-             status: 'concluida'
+             formulario_id: params?.id,
+             ...montarPayloadExecucao('concluida')
            }),
-         });
+         }, 'Sessao expirada ao finalizar execucao.');
          
-         if (response.ok) {
+         if (response?.ok) {
            const data = await response.json();
            execucaoFinalId = data.data.id;
          }
        }
  
+       if (!response) return;
+ 
        if (!response.ok) {
-         const errorData = await response.json();
-         throw new Error(errorData.error || 'Erro ao finalizar execução');
+         throw new Error(await getApiErrorMessage(response, 'Erro ao finalizar execução'));
        }
  
        toast.success('Execução finalizada com sucesso!');
@@ -1267,7 +1177,7 @@ function ExecutarFormularioPage() {
                     r.pergunta_id === formulario.perguntas[perguntaAtual].id
                   )?.valor === 'nao_conforme' && (
                     <div className="space-y-4">
-                      {isContinuandoExecucao && execucaoId ? (
+                      {isContinuandoExecucao && execucaoIdAtual ? (
                         <>
                           {/* Mostrar planos existentes para esta pergunta */}
                           {obterPlanosPorPergunta(formulario.perguntas[perguntaAtual].id).length > 0 && (
@@ -1389,12 +1299,12 @@ function ExecutarFormularioPage() {
         )}
 
         {/* Modal para criação/edição de Plano de Ação */}
-        {isContinuandoExecucao && execucaoId && (
+        {isContinuandoExecucao && execucaoIdAtual && (
           <PlanoAcaoModal
             isOpen={planoModalOpen}
             onClose={() => setPlanoModalOpen(false)}
             onSuccess={() => { setPlanoModalOpen(false); buscarPlanosExistentes(); }}
-            execucaoId={execucaoId}
+            execucaoId={execucaoIdAtual}
             perguntaId={perguntaIdCriandoPlano}
             usuarios={usuariosPlanoAcao}
           />
@@ -1461,4 +1371,3 @@ function ExecutarFormularioPage() {
 }
 
 export default ExecutarFormularioPage;
-

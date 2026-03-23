@@ -1,12 +1,32 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWTToken } from '@/lib/jwt-middleware'
 import { hashPassword } from '@/lib/auth'
+import { getUserPermissions } from '@/lib/permissions-server'
 import { createClient } from '@supabase/supabase-js'
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
+const EDIT_USERS_FUNCTIONALITY_SLUG = 'editar_usuarios'
+
+async function userHasEditUsersPermission(user: NonNullable<Awaited<ReturnType<typeof verifyJWTToken>>['user']>) {
+  try {
+    const permissions = await getUserPermissions(user)
+    if (!permissions) {
+      return false
+    }
+
+    return permissions.modulos.some((modulo) =>
+      modulo.funcionalidades.some(
+        (funcionalidade) => funcionalidade.slug === EDIT_USERS_FUNCTIONALITY_SLUG
+      )
+    )
+  } catch (error) {
+    console.error('Erro ao verificar funcionalidade editar_usuarios:', error)
+    return false
+  }
+}
 
 // GET - Listar usuarios
 export async function GET(request: NextRequest) {
@@ -130,8 +150,11 @@ export async function PUT(request: NextRequest) {
     // Verificar se é admin ou o próprio usuário usando o role do token JWT
     const isAdmin = authResult.user?.role === 'Admin'
     const isOwnProfile = authResult.user?.matricula === matricula
+    const hasEditUsersPermission = authResult.user
+      ? await userHasEditUsersPermission(authResult.user)
+      : false
 
-    if (!isAdmin && !isOwnProfile) {
+    if (!isAdmin && !isOwnProfile && !hasEditUsersPermission) {
       return NextResponse.json(
         { success: false, message: 'Acesso negado' },
         { status: 403 }
@@ -159,8 +182,8 @@ export async function PUT(request: NextRequest) {
       updateData.password_hash = await hashPassword(password_hash)
     }
     
-    // Apenas admins podem alterar role e status
-    if (isAdmin) {
+    // Admin ou quem possui editar_usuarios pode alterar role e status
+    if (isAdmin || hasEditUsersPermission) {
       if (role) updateData.role = role
       if (status) updateData.status = status
     }

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -78,6 +78,57 @@ export default function PlanoAcaoModal({
   const [novasEvidencias, setNovasEvidencias] = useState<File[]>([]);
   const [buscaResponsavel, setBuscaResponsavel] = useState('');
   const [responsavelOpen, setResponsavelOpen] = useState(false);
+
+  const getApiErrorMessage = useCallback(async (response: Response, fallbackMessage: string) => {
+    try {
+      const data = await response.json();
+      if (typeof data?.error === 'string' && data.error.trim()) return data.error;
+      if (typeof data?.message === 'string' && data.message.trim()) return data.message;
+    } catch {
+      try {
+        const text = await response.text();
+        if (text.trim()) return text;
+      } catch {
+        // ignore
+      }
+    }
+
+    return fallbackMessage;
+  }, []);
+
+  const redirecionarParaLogin = useCallback((message?: string) => {
+    const callbackUrl =
+      typeof window !== 'undefined'
+        ? `${window.location.pathname}${window.location.search}`
+        : '/inspecoes';
+
+    toast.error(message || 'Sessao expirada. Faca login novamente.');
+    if (typeof window !== 'undefined') {
+      window.location.assign(`/login?callbackUrl=${encodeURIComponent(callbackUrl)}`);
+    }
+  }, []);
+
+  const fetchComCookie = useCallback(async (
+    input: RequestInfo | URL,
+    init?: RequestInit,
+    unauthorizedMessage?: string
+  ) => {
+    const response = await fetch(input, {
+      credentials: 'include',
+      ...init,
+    });
+
+    if (response.status === 401) {
+      const message = await getApiErrorMessage(
+        response,
+        unauthorizedMessage || 'Sessao expirada. Faca login novamente.'
+      );
+      redirecionarParaLogin(message);
+      return null;
+    }
+
+    return response;
+  }, [getApiErrorMessage, redirecionarParaLogin]);
 
   const usuariosFiltrados = useMemo(() => {
     const termo = buscaResponsavel.trim().toLowerCase();
@@ -211,14 +262,18 @@ export default function PlanoAcaoModal({
           status: formData.status,
         };
 
-        const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
+        const response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoId}/planos-acao`, {
           method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify(createData)
-        });
+        }, 'Sessao expirada ao salvar plano de acao.');
+
+        if (!response) return;
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Erro ao criar plano de ação');
+          throw new Error(await getApiErrorMessage(response, 'Erro ao criar plano de ação'));
         }
 
         const result = await response.json();
@@ -235,14 +290,18 @@ export default function PlanoAcaoModal({
           prioridade: formData.prioridade
         };
 
-        const response = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao/${planoId}`, {
+        const response = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoId}/planos-acao/${planoId}`, {
           method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
           body: JSON.stringify(updateData)
-        });
+        }, 'Sessao expirada ao salvar plano de acao.');
+
+        if (!response) return;
 
         if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Erro ao atualizar plano de ação');
+          throw new Error(await getApiErrorMessage(response, 'Erro ao atualizar plano de ação'));
         }
       }
 
@@ -252,10 +311,12 @@ export default function PlanoAcaoModal({
           const formDataUpload = new FormData();
           formDataUpload.append('arquivo', arquivo);
 
-          const uploadResponse = await fetch(`/api/inspecoes/execucoes/${execucaoId}/planos-acao/${planoId}/evidencias`, {
+          const uploadResponse = await fetchComCookie(`/api/inspecoes/execucoes/${execucaoId}/planos-acao/${planoId}/evidencias`, {
             method: 'POST',
             body: formDataUpload
-          });
+          }, 'Sessao expirada ao enviar evidencia.');
+
+          if (!uploadResponse) return;
 
           if (!uploadResponse.ok) {
             console.error('Erro ao fazer upload de evidência:', await uploadResponse.text());

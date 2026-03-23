@@ -1,32 +1,58 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyJWTToken } from '@/lib/jwt-middleware';
+import { userHasFunctionality } from '@/lib/permissions-server';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+const LETTERS_MANAGE_FUNCTIONALITY_SLUG = 'letras-gestao';
+
+type AuthenticatedUser = NonNullable<Awaited<ReturnType<typeof verifyJWTToken>>['user']>;
+
+async function hasLettersManagementPermission(user: AuthenticatedUser) {
+  try {
+    return await userHasFunctionality(user, LETTERS_MANAGE_FUNCTIONALITY_SLUG);
+  } catch (error) {
+    console.error('Erro ao verificar funcionalidade letras-gestao:', error);
+    return false;
+  }
+}
+
+async function getUserContract(matricula: number | string) {
+  const { data, error } = await supabase
+    .from('usuarios')
+    .select('contrato_raiz')
+    .eq('matricula', matricula)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.contrato_raiz;
+}
+
 // GET - Buscar letras
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await verifyJWTToken(request)
+    const authResult = await verifyJWTToken(request);
     if (!authResult.success || !authResult.user) {
-      return NextResponse.json({ error: authResult.error || 'Usuário não autenticado' }, { status: 401 })
+      return NextResponse.json({ error: authResult.error || 'Usuario nao autenticado' }, { status: 401 });
     }
 
-    // Buscar o contrato_raiz do usuário logado
-    const { data: userData, error: userError } = await supabase
-      .from('usuarios')
-      .select('contrato_raiz')
-      .eq('matricula', authResult.user.matricula)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    const hasPermission = await hasLettersManagementPermission(authResult.user);
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
-    // Buscar letras do mesmo contrato_raiz
+    const contratoRaiz = await getUserContract(authResult.user.matricula);
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Usuario nao encontrado' }, { status: 404 });
+    }
+
     const { data: letras, error } = await supabase
       .from('letras')
       .select(`
@@ -37,7 +63,7 @@ export async function GET(request: NextRequest) {
         created_at,
         usuarios!letras_lider_fkey(nome)
       `)
-      .eq('codigo_contrato', userData.contrato_raiz)
+      .eq('codigo_contrato', contratoRaiz)
       .order('created_at', { ascending: false });
 
     if (error) {
@@ -53,54 +79,49 @@ export async function GET(request: NextRequest) {
 // POST - Criar nova letra
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await verifyJWTToken(request)
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 })
+    const authResult = await verifyJWTToken(request);
+    if (!authResult.success || !authResult.user) {
+      return NextResponse.json({ error: authResult.error || 'Usuario nao autenticado' }, { status: 401 });
     }
 
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!authResult.user || (authResult.user.role !== 'Admin' && authResult.user.role !== 'Editor')) {
-      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    const hasPermission = await hasLettersManagementPermission(authResult.user);
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
-    // Buscar o contrato_raiz do usuário logado
-    const { data: userData, error: userError } = await supabase
-      .from('usuarios')
-      .select('contrato_raiz')
-      .eq('matricula', authResult.user.matricula)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    const contratoRaiz = await getUserContract(authResult.user.matricula);
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Usuario nao encontrado' }, { status: 404 });
     }
 
     const { letra, lider } = await request.json();
 
     if (!letra || !lider) {
-      return NextResponse.json({ error: 'Letra e líder são obrigatórios' }, { status: 400 });
+      return NextResponse.json({ error: 'Letra e lider sao obrigatorios' }, { status: 400 });
     }
 
-    // Converter letra para caixa alta
-    const letraUpperCase = letra.toUpperCase();
+    const letraUpperCase = String(letra).toUpperCase();
 
-    // Verificar se a letra já existe para este contrato
-    const { data: existingLetter } = await supabase
+    const { data: existingLetter, error: existingLetterError } = await supabase
       .from('letras')
       .select('id')
       .eq('letra', letraUpperCase)
-      .eq('codigo_contrato', userData.contrato_raiz)
+      .eq('codigo_contrato', contratoRaiz)
       .single();
 
-    if (existingLetter) {
-      return NextResponse.json({ error: 'Esta letra já existe para este contrato' }, { status: 400 });
+    if (existingLetterError && existingLetterError.code !== 'PGRST116') {
+      return NextResponse.json({ error: existingLetterError.message }, { status: 500 });
     }
 
-    // Criar nova letra
+    if (existingLetter) {
+      return NextResponse.json({ error: 'Esta letra ja existe para este contrato' }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('letras')
       .insert({
         letra: letraUpperCase,
-        codigo_contrato: userData.contrato_raiz,
+        codigo_contrato: contratoRaiz,
         lider
       })
       .select()
@@ -119,34 +140,27 @@ export async function POST(request: NextRequest) {
 // PUT - Atualizar letra
 export async function PUT(request: NextRequest) {
   try {
-    const authResult = await verifyJWTToken(request)
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 })
+    const authResult = await verifyJWTToken(request);
+    if (!authResult.success || !authResult.user) {
+      return NextResponse.json({ error: authResult.error || 'Usuario nao autenticado' }, { status: 401 });
     }
 
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!authResult.user || (authResult.user.role !== 'Admin' && authResult.user.role !== 'Editor')) {
-      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    const hasPermission = await hasLettersManagementPermission(authResult.user);
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
     const { id, letra, lider } = await request.json();
 
     if (!id || !letra || !lider) {
-      return NextResponse.json({ error: 'ID, letra e líder são obrigatórios' }, { status: 400 });
+      return NextResponse.json({ error: 'ID, letra e lider sao obrigatorios' }, { status: 400 });
     }
 
-    // Buscar o contrato_raiz do usuário logado
-    const { data: userData, error: userError } = await supabase
-      .from('usuarios')
-      .select('contrato_raiz')
-      .eq('matricula', authResult.user.matricula)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    const contratoRaiz = await getUserContract(authResult.user.matricula);
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Usuario nao encontrado' }, { status: 404 });
     }
 
-    // Verificar se a letra pertence ao contrato do usuário
     const { data: existingLetter, error: letterError } = await supabase
       .from('letras')
       .select('codigo_contrato')
@@ -154,30 +168,31 @@ export async function PUT(request: NextRequest) {
       .single();
 
     if (letterError || !existingLetter) {
-      return NextResponse.json({ error: 'Letra não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Letra nao encontrada' }, { status: 404 });
     }
 
-    if (existingLetter.codigo_contrato !== userData.contrato_raiz) {
-      return NextResponse.json({ error: 'Sem permissão para editar esta letra' }, { status: 403 });
+    if (existingLetter.codigo_contrato !== contratoRaiz) {
+      return NextResponse.json({ error: 'Sem permissao para editar esta letra' }, { status: 403 });
     }
 
-    // Converter letra para caixa alta
-    const letraUpperCase = letra.toUpperCase();
+    const letraUpperCase = String(letra).toUpperCase();
 
-    // Verificar se já existe outra letra com o mesmo nome para este contrato
-    const { data: duplicateLetter } = await supabase
+    const { data: duplicateLetter, error: duplicateLetterError } = await supabase
       .from('letras')
       .select('id')
       .eq('letra', letraUpperCase)
-      .eq('codigo_contrato', userData.contrato_raiz)
+      .eq('codigo_contrato', contratoRaiz)
       .neq('id', id)
       .single();
 
-    if (duplicateLetter) {
-      return NextResponse.json({ error: 'Já existe outra letra com este nome para este contrato' }, { status: 400 });
+    if (duplicateLetterError && duplicateLetterError.code !== 'PGRST116') {
+      return NextResponse.json({ error: duplicateLetterError.message }, { status: 500 });
     }
 
-    // Atualizar letra
+    if (duplicateLetter) {
+      return NextResponse.json({ error: 'Ja existe outra letra com este nome para este contrato' }, { status: 400 });
+    }
+
     const { data, error } = await supabase
       .from('letras')
       .update({ letra: letraUpperCase, lider })
@@ -198,35 +213,28 @@ export async function PUT(request: NextRequest) {
 // DELETE - Excluir letra
 export async function DELETE(request: NextRequest) {
   try {
-    const authResult = await verifyJWTToken(request)
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 })
+    const authResult = await verifyJWTToken(request);
+    if (!authResult.success || !authResult.user) {
+      return NextResponse.json({ error: authResult.error || 'Usuario nao autenticado' }, { status: 401 });
     }
 
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!authResult.user || (authResult.user.role !== 'Admin' && authResult.user.role !== 'Editor')) {
-      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    const hasPermission = await hasLettersManagementPermission(authResult.user);
+    if (!hasPermission) {
+      return NextResponse.json({ error: 'Acesso negado' }, { status: 403 });
     }
 
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
     if (!id) {
-      return NextResponse.json({ error: 'ID é obrigatório' }, { status: 400 });
+      return NextResponse.json({ error: 'ID e obrigatorio' }, { status: 400 });
     }
 
-    // Buscar o contrato_raiz do usuário logado
-    const { data: userData, error: userError } = await supabase
-      .from('usuarios')
-      .select('contrato_raiz')
-      .eq('matricula', authResult.user.matricula)
-      .single();
-
-    if (userError || !userData) {
-      return NextResponse.json({ error: 'Usuário não encontrado' }, { status: 404 });
+    const contratoRaiz = await getUserContract(authResult.user.matricula);
+    if (!contratoRaiz) {
+      return NextResponse.json({ error: 'Usuario nao encontrado' }, { status: 404 });
     }
 
-    // Verificar se a letra pertence ao contrato do usuário
     const { data: existingLetter, error: letterError } = await supabase
       .from('letras')
       .select('codigo_contrato')
@@ -234,14 +242,13 @@ export async function DELETE(request: NextRequest) {
       .single();
 
     if (letterError || !existingLetter) {
-      return NextResponse.json({ error: 'Letra não encontrada' }, { status: 404 });
+      return NextResponse.json({ error: 'Letra nao encontrada' }, { status: 404 });
     }
 
-    if (existingLetter.codigo_contrato !== userData.contrato_raiz) {
-      return NextResponse.json({ error: 'Sem permissão para excluir esta letra' }, { status: 403 });
+    if (existingLetter.codigo_contrato !== contratoRaiz) {
+      return NextResponse.json({ error: 'Sem permissao para excluir esta letra' }, { status: 403 });
     }
 
-    // Excluir letra
     const { error } = await supabase
       .from('letras')
       .delete()
@@ -251,7 +258,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: error.message }, { status: 500 });
     }
 
-    return NextResponse.json({ message: 'Letra excluída com sucesso' });
+    return NextResponse.json({ message: 'Letra excluida com sucesso' });
   } catch {
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
