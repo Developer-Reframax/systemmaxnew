@@ -23,6 +23,8 @@ export async function GET(request: NextRequest) {
     const contratoParam = searchParams.get('contrato')
     const responsavel = searchParams.get('responsavel')
     const matricula_user = searchParams.get('matricula_user')
+    const apenasEquipesSupervisionadas =
+      searchParams.get('apenas_equipes_supervisionadas') === 'true'
     const meus = searchParams.get('meus') // Novo parâmetro para filtrar desvios do usuário
     const search = searchParams.get('search') // Parâmetro para busca por título, descrição ou local
     const potencial_local = searchParams.get('potencial_local') // Parâmetro para filtrar por gravidade/potencial local
@@ -63,6 +65,51 @@ export async function GET(request: NextRequest) {
       .from('desvios')
       .select('*', { count: 'exact', head: true })
       .eq('contrato', userContract)
+
+    if (apenasEquipesSupervisionadas) {
+      const matricula = authResult.user?.matricula
+      if (!matricula) {
+        return NextResponse.json(
+          { success: false, message: 'Matricula do usuario nao encontrada' },
+          { status: 400 }
+        )
+      }
+
+      const { data: equipesSupervisionadas, error: equipesError } = await supabase
+        .from('equipes')
+        .select('id')
+        .eq('codigo_contrato', userContract)
+        .in('supervisor', [matricula, String(matricula)])
+
+      if (equipesError) {
+        console.error('Erro ao buscar equipes supervisionadas:', equipesError)
+        return NextResponse.json(
+          { success: false, message: 'Erro ao buscar equipes supervisionadas' },
+          { status: 500 }
+        )
+      }
+
+      const equipeIds = (equipesSupervisionadas || [])
+        .map((equipe) => equipe.id)
+        .filter(Boolean)
+
+      if (equipeIds.length === 0) {
+        return NextResponse.json({
+          success: true,
+          data: [],
+          total: 0,
+          pagination: {
+            page,
+            limit,
+            total: 0,
+            totalPages: 0
+          }
+        })
+      }
+
+      query = query.in('equipe_id', equipeIds)
+      countQuery = countQuery.in('equipe_id', equipeIds)
+    }
 
     // Aplicar filtros
     if (status) {

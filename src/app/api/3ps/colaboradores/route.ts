@@ -17,6 +17,7 @@ interface UsuarioColaborador {
 
 interface Registro3PResumo {
   matricula_criador: number
+  created_at?: string | null
   participantes?: Array<{ matricula_participante: number | null }> | null
 }
 
@@ -54,6 +55,7 @@ export async function GET(request: NextRequest) {
       .from('registros_3ps')
       .select(`
         matricula_criador,
+        created_at,
         participantes:participantes_3ps(matricula_participante),
         area:locais(contrato)
       `)
@@ -64,16 +66,33 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao buscar registros 3P' }, { status: 500 })
     }
 
-    const contagens = new Map<number, { created: number; participated: number }>()
+    const formatDateTimePtBr = (value?: string | null) => {
+      if (!value) return null
+      const parsed = new Date(value)
+      if (Number.isNaN(parsed.getTime())) return null
+      return parsed.toLocaleString('pt-BR', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      })
+    }
+
+    const contagens = new Map<number, { created: number; participated: number; lastAt: string | null }>()
     ;(usuarios || []).forEach((usuario) => {
-      contagens.set(usuario.matricula, { created: 0, participated: 0 })
+      contagens.set(usuario.matricula, { created: 0, participated: 0, lastAt: null })
     })
 
     ;(registros as Registro3PResumo[] | null | undefined)?.forEach((registro) => {
+      const registroData = registro.created_at || null
       const creator = registro.matricula_criador
       const creatorCount = contagens.get(creator)
       if (creatorCount) {
         creatorCount.created += 1
+        if (!creatorCount.lastAt || (registroData && new Date(registroData) > new Date(creatorCount.lastAt))) {
+          creatorCount.lastAt = registroData
+        }
       }
 
       registro.participantes?.forEach((p) => {
@@ -82,12 +101,18 @@ export async function GET(request: NextRequest) {
         const participanteCount = contagens.get(matricula)
         if (participanteCount) {
           participanteCount.participated += 1
+          if (
+            !participanteCount.lastAt ||
+            (registroData && new Date(registroData) > new Date(participanteCount.lastAt))
+          ) {
+            participanteCount.lastAt = registroData
+          }
         }
       })
     })
 
     const colaboradores = (usuarios as UsuarioColaborador[] | null | undefined)?.map((usuario) => {
-      const counts = contagens.get(usuario.matricula) || { created: 0, participated: 0 }
+      const counts = contagens.get(usuario.matricula) || { created: 0, participated: 0, lastAt: null }
       const total = counts.created + counts.participated
       return {
         matricula: usuario.matricula,
@@ -98,7 +123,8 @@ export async function GET(request: NextRequest) {
         createdCount: counts.created,
         participatedCount: counts.participated,
         totalCount: total,
-        fez3p: total > 0
+        fez3p: total > 0,
+        dataRealizacao3p: formatDateTimePtBr(counts.lastAt)
       }
     }) || []
 

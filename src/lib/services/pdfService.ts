@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import { OAC, PDFConfig, PDFGenerationOptions } from '../types/pdf'
+import { extractDateKeyFromDatabase, formatDateTimeFromDatabase } from '@/lib/datetime'
 
 export class PDFService {
   private static readonly DEFAULT_CONFIG: PDFConfig = {
@@ -408,18 +409,7 @@ export class PDFService {
   }
 
   static formatDateTime(dateString: string): string {
-    try {
-      const date = new Date(dateString)
-      return date.toLocaleString('pt-BR', {
-        day: '2-digit',
-        month: '2-digit',
-        year: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      })
-    } catch {
-      return dateString
-    }
+    return formatDateTimeFromDatabase(dateString)
   }
 
   static formatDuration(minutes: number): string {
@@ -438,8 +428,7 @@ export class PDFService {
   }
 
   private static generateFilename(oac: OAC): string {
-    const date = new Date(oac.datahora_inicio)
-    const dateStr = date.toISOString().split('T')[0].replace(/-/g, '')
+    const dateStr = extractDateKeyFromDatabase(oac.datahora_inicio)
     return `OAC_${oac.id.toString()}_${dateStr}.pdf`
   }
 }
