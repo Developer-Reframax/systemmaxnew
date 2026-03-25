@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
           id,
           contrato,
           matricula_user,
+          responsavel,
           descricao,
           local,
           potencial,
@@ -110,6 +111,7 @@ export async function GET(request: NextRequest) {
       id: string
       contrato: string
       matricula_user: number
+      responsavel: string | null
       descricao: string
       local: string
       potencial: string | null
@@ -130,6 +132,37 @@ export async function GET(request: NextRequest) {
       criador?: { matricula?: number; nome?: string | null } | { matricula?: number; nome?: string | null }[]
     }
 
+    const responsavelIds = Array.from(
+      new Set(
+        (((data as ExportRow[] | null) || [])
+          .map((item) => item.responsavel)
+          .filter((responsavel): responsavel is string => !!responsavel))
+      )
+    )
+
+    const { data: responsaveisData, error: responsaveisError } =
+      responsavelIds.length > 0
+        ? await supabase
+            .from('usuarios')
+            .select('matricula, nome')
+            .in('matricula', responsavelIds.map((id) => Number(id)).filter((id) => Number.isFinite(id)))
+        : { data: [], error: null }
+
+    if (responsaveisError) {
+      console.error('Erro ao buscar responsaveis para exportacao:', responsaveisError)
+      return NextResponse.json(
+        { success: false, message: 'Erro ao buscar responsaveis dos desvios' },
+        { status: 500 }
+      )
+    }
+
+    const responsavelNomeByMatricula = new Map(
+      ((responsaveisData || []) as Array<{ matricula: number; nome: string | null }>).map((responsavel) => [
+        String(responsavel.matricula),
+        responsavel.nome
+      ])
+    )
+
     const rows = ((data as ExportRow[] | null) || []).map((item) => {
       const equipeInfo = Array.isArray(item.equipe) ? item.equipe[0] : item.equipe
       const naturezaInfo = Array.isArray(item.natureza) ? item.natureza[0] : item.natureza
@@ -139,6 +172,10 @@ export async function GET(request: NextRequest) {
       return {
         matricula: criadorInfo?.matricula || item.matricula_user,
         nome: criadorInfo?.nome || null,
+        responsavel_nome: item.responsavel
+          ? responsavelNomeByMatricula.get(String(item.responsavel)) || null
+          : null,
+        descricao: item.descricao,
         natureza: naturezaInfo?.natureza || null,
         contrato: item.contrato,
         local: item.local,

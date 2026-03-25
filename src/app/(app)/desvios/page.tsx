@@ -52,6 +52,8 @@ type ExportColumn = {
 const EXPORT_COLUMNS: ExportColumn[] = [
   { id: 'matricula', label: 'Matricula', width: 12 },
   { id: 'nome', label: 'Nome', width: 26 },
+  { id: 'responsavel_nome', label: 'Responsavel', width: 26 },
+  { id: 'descricao', label: 'Descricao', width: 42 },
   { id: 'natureza', label: 'Natureza', width: 18 },
   { id: 'contrato', label: 'Contrato', width: 14 },
   { id: 'local', label: 'Local', width: 18 },

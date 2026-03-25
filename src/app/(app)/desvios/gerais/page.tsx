@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import { Search, Filter, Download, Eye, AlertTriangle, Clock, CheckCircle, XCircle, TrendingUp, Minus, User, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Search, Filter, Download, Eye, AlertTriangle, Clock, CheckCircle, XCircle, TrendingUp, Minus, User, ChevronLeft, ChevronRight, Edit, Save, X } from 'lucide-react'
 import * as ExcelJS from 'exceljs'
 import { toast } from 'sonner'
 
@@ -16,8 +16,21 @@ interface Desvio {
   gravidade: string
   potencial: string
   potencial_local: string | null
-  responsavel?: string // Matrícula do responsável
-  responsavel_nome?: string // Nome do responsável
+  responsavel?: string | number | null
+  responsavel_nome?: string | null
+  avaliador_nome?: string | null
+  natureza_id?: string | null
+  tipo_id?: string | null
+  riscoassociado_id?: string | null
+  contrato?: string | null
+  ver_agir?: boolean | null
+  acao_cliente?: boolean | null
+  gerou_recusa?: boolean | null
+  acao?: string | null
+  observacao?: string | null
+  data_limite?: string | null
+  data_conclusao?: string | null
+  equipe_id?: string | null
   natureza?: {
     id: string
     natureza: string
@@ -40,6 +53,40 @@ interface Potencial {
   potencial_sede: string
   potencial_local: string
   contrato: string
+}
+
+interface Option {
+  id: string
+  label: string
+}
+
+interface DesvioDetalhe extends Desvio {
+  criador?: {
+    matricula: string | number
+    nome: string
+    email?: string
+  }
+  equipe?: {
+    id: string
+    equipe: string
+  }
+}
+
+interface EditFormData {
+  local: string
+  data_ocorrencia: string
+  natureza_id: string
+  tipo_id: string
+  riscoassociado_id: string
+  potencial: string
+  potencial_local: string
+  responsavel: string
+  data_conclusao: string
+  acao: string
+  observacao: string
+  ver_agir: boolean
+  acao_cliente: boolean
+  gerou_recusa: boolean
 }
 
 interface Filtros {
@@ -94,8 +141,292 @@ export default function DesviosGerais() {
   const [totalPages, setTotalPages] = useState(1)
   const [responsaveis, setResponsaveis] = useState<Responsavel[]>([])
   const [potenciais, setPotenciais] = useState<Potencial[]>([])
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editingDesvio, setEditingDesvio] = useState<DesvioDetalhe | null>(null)
+  const [editLoading, setEditLoading] = useState(false)
+  const [savingEdit, setSavingEdit] = useState(false)
+  const [naturezas, setNaturezas] = useState<Option[]>([])
+  const [tipos, setTipos] = useState<Option[]>([])
+  const [riscos, setRiscos] = useState<Option[]>([])
+  const [locais, setLocais] = useState<string[]>([])
+  const [editFormData, setEditFormData] = useState<EditFormData>({
+    local: '',
+    data_ocorrencia: '',
+    natureza_id: '',
+    tipo_id: '',
+    riscoassociado_id: '',
+    potencial: '',
+    potencial_local: '',
+    responsavel: '',
+    data_conclusao: '',
+    acao: '',
+    observacao: '',
+    ver_agir: false,
+    acao_cliente: false,
+    gerou_recusa: false
+  })
 
   const itemsPerPage = 20
+
+  const formatDateForInput = (dateString?: string | null) => {
+    if (!dateString) return ''
+
+    const date = new Date(dateString)
+    if (Number.isNaN(date.getTime())) {
+      return typeof dateString === 'string' ? dateString.slice(0, 10) : ''
+    }
+
+    return date.toISOString().slice(0, 10)
+  }
+
+  const closeEditModal = useCallback(() => {
+    setShowEditModal(false)
+    setEditingDesvio(null)
+    setTipos([])
+    setLocais([])
+    setNaturezas([])
+    setRiscos([])
+    setEditFormData({
+      local: '',
+      data_ocorrencia: '',
+      natureza_id: '',
+      tipo_id: '',
+      riscoassociado_id: '',
+      potencial: '',
+      potencial_local: '',
+      responsavel: '',
+      data_conclusao: '',
+      acao: '',
+      observacao: '',
+      ver_agir: false,
+      acao_cliente: false,
+      gerou_recusa: false
+    })
+  }, [])
+
+  const loadNaturezas = useCallback(async (contrato?: string | null) => {
+    if (!contrato) {
+      setNaturezas([])
+      return
+    }
+
+    const response = await fetch(`/api/security-params/natures?contrato=${encodeURIComponent(contrato)}&limit=500`, {
+      method: 'GET'
+    })
+
+    if (!response.ok) {
+      throw new Error('Erro ao carregar naturezas')
+    }
+
+    const data = await response.json()
+    if (data.success) {
+      setNaturezas(
+        (data.data || []).map((item: { id: string; natureza: string }) => ({
+          id: String(item.id),
+          label: item.natureza
+        }))
+      )
+    }
+  }, [])
+
+  const loadTipos = useCallback(async (naturezaId?: string, contrato?: string | null) => {
+    if (!naturezaId || !contrato) {
+      setTipos([])
+      return
+    }
+
+    const response = await fetch(
+      `/api/security-params/types?nature_id=${encodeURIComponent(naturezaId)}&contrato=${encodeURIComponent(contrato)}&limit=500`,
+      { method: 'GET' }
+    )
+
+    if (!response.ok) {
+      throw new Error('Erro ao carregar tipos')
+    }
+
+    const data = await response.json()
+    if (data.success) {
+      setTipos(
+        (data.data || []).map((item: { id: string; tipo: string }) => ({
+          id: String(item.id),
+          label: item.tipo
+        }))
+      )
+    }
+  }, [])
+
+  const loadRiscos = useCallback(async () => {
+    const response = await fetch('/api/security-params/associated-risks?limit=500', {
+      method: 'GET'
+    })
+
+    if (!response.ok) {
+      throw new Error('Erro ao carregar riscos associados')
+    }
+
+    const data = await response.json()
+    if (data.success) {
+      setRiscos(
+        (data.data || []).map((item: { id: string; risco_associado: string }) => ({
+          id: String(item.id),
+          label: item.risco_associado
+        }))
+      )
+    }
+  }, [])
+
+  const loadLocais = useCallback(async (contrato?: string | null) => {
+    if (!contrato) {
+      setLocais([])
+      return
+    }
+
+    const response = await fetch(`/api/security-params/locations?contrato=${encodeURIComponent(contrato)}&limit=500`, {
+      method: 'GET'
+    })
+
+    if (!response.ok) {
+      throw new Error('Erro ao carregar locais')
+    }
+
+    const data = await response.json()
+    if (data.success) {
+      const locaisList = (data.data || [])
+        .map((item: { local?: string }) => item.local)
+        .filter((local: string | undefined): local is string => typeof local === 'string' && local.trim().length > 0)
+      setLocais(Array.from(new Set(locaisList)))
+    }
+  }, [])
+
+  const handleOpenEditModal = useCallback(async (desvioPreview: Desvio) => {
+    try {
+      setEditLoading(true)
+      setShowEditModal(true)
+
+      const response = await fetch(`/api/desvios/${desvioPreview.id}`, {
+        method: 'GET'
+      })
+
+      if (!response.ok) {
+        throw new Error('Erro ao carregar desvio')
+      }
+
+      const result = await response.json()
+      if (!result.success) {
+        throw new Error(result.message || 'Erro ao carregar desvio')
+      }
+
+      const data = {
+        ...result.data,
+        avaliador_nome: result.data?.avaliador_nome || desvioPreview.avaliador_nome || null
+      } as DesvioDetalhe
+      const contrato = data.contrato || user?.contrato_raiz || null
+
+      setEditingDesvio(data)
+      setEditFormData({
+        local: data.local || '',
+        data_ocorrencia: formatDateForInput(data.data_ocorrencia || data.created_at),
+        natureza_id: data.natureza_id ? String(data.natureza_id) : data.natureza?.id ? String(data.natureza.id) : '',
+        tipo_id: data.tipo_id ? String(data.tipo_id) : data.tipo?.id ? String(data.tipo.id) : '',
+        riscoassociado_id: data.riscoassociado_id ? String(data.riscoassociado_id) : '',
+        potencial: data.potencial || '',
+        potencial_local: data.potencial_local || '',
+        responsavel: data.responsavel ? String(data.responsavel) : '',
+        data_conclusao: formatDateForInput(data.data_conclusao),
+        acao: data.acao || '',
+        observacao: data.observacao || '',
+        ver_agir: Boolean(data.ver_agir),
+        acao_cliente: Boolean(data.acao_cliente),
+        gerou_recusa: Boolean(data.gerou_recusa)
+      })
+
+      await Promise.all([
+        loadNaturezas(contrato),
+        loadLocais(contrato),
+        loadRiscos()
+      ])
+
+      const naturezaId =
+        data.natureza_id ? String(data.natureza_id) : data.natureza?.id ? String(data.natureza.id) : ''
+
+      if (naturezaId) {
+        await loadTipos(naturezaId, contrato)
+      } else {
+        setTipos([])
+      }
+    } catch (error) {
+      console.error('Erro ao abrir edição do desvio:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao carregar dados do desvio')
+      closeEditModal()
+    } finally {
+      setEditLoading(false)
+    }
+  }, [closeEditModal, loadLocais, loadNaturezas, loadRiscos, loadTipos, user?.contrato_raiz])
+
+  const handleEditSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
+
+    if (!editingDesvio) return
+
+    if (!editFormData.local || !editFormData.natureza_id || !editFormData.tipo_id || !editFormData.riscoassociado_id || !editFormData.potencial) {
+      toast.error('Preencha os campos obrigatórios para salvar o desvio')
+      return
+    }
+
+    try {
+      setSavingEdit(true)
+
+      const response = await fetch('/api/desvios', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          id: editingDesvio.id,
+          local: editFormData.local,
+          data_ocorrencia: editFormData.data_ocorrencia || null,
+          natureza_id: editFormData.natureza_id || null,
+          tipo_id: editFormData.tipo_id || null,
+          riscoassociado_id: editFormData.riscoassociado_id || null,
+          potencial: editFormData.potencial || null,
+          potencial_local: editFormData.potencial_local || null,
+          responsavel: editFormData.responsavel || null,
+          data_conclusao: editFormData.data_conclusao || null,
+          acao: editFormData.acao || null,
+          observacao: editFormData.observacao || null,
+          ver_agir: editFormData.ver_agir,
+          acao_cliente: editFormData.acao_cliente,
+          gerou_recusa: editFormData.gerou_recusa
+        })
+      })
+
+      const result = await response.json()
+      if (!response.ok || !result.success) {
+        throw new Error(result.message || 'Erro ao atualizar desvio')
+      }
+
+      toast.success('Desvio atualizado com sucesso')
+      closeEditModal()
+      await loadDesvios()
+    } catch (error) {
+      console.error('Erro ao salvar desvio:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao salvar desvio')
+    } finally {
+      setSavingEdit(false)
+    }
+  }
+
+  const potencialLocalOptions = useMemo(
+    () =>
+      potenciais
+        .filter((potencial) => !user?.contrato_raiz || potencial.contrato === user.contrato_raiz)
+        .map((potencial) => ({
+          id: potencial.id,
+          label: potencial.potencial_local,
+          potencial: potencial.potencial_sede || potencial.potencial_local
+        })),
+    [potenciais, user?.contrato_raiz]
+  )
 
   const loadDesvios = useCallback(async () => {
     try {
@@ -225,6 +556,33 @@ export default function DesviosGerais() {
     }
   }, [user, filtros, currentPage, loadDesvios])
 
+  useEffect(() => {
+    if (!showEditModal || !editingDesvio) return
+
+    const contrato = editingDesvio.contrato || user?.contrato_raiz || null
+    if (!editFormData.natureza_id || !contrato) {
+      setTipos([])
+      return
+    }
+
+    void loadTipos(editFormData.natureza_id, contrato)
+  }, [editFormData.natureza_id, editingDesvio, loadTipos, showEditModal, user?.contrato_raiz])
+
+  useEffect(() => {
+    if (!editFormData.potencial_local) return
+
+    const selectedPotencial = potencialLocalOptions.find(
+      (potencial) => potencial.label === editFormData.potencial_local
+    )
+
+    if (selectedPotencial && selectedPotencial.potencial !== editFormData.potencial) {
+      setEditFormData((prev) => ({
+        ...prev,
+        potencial: selectedPotencial.potencial
+      }))
+    }
+  }, [editFormData.potencial, editFormData.potencial_local, potencialLocalOptions])
+
   const handleFilterChange = (field: keyof Filtros, value: string) => {
     setFiltros(prev => ({ ...prev, [field]: value }))
     setCurrentPage(1)
@@ -256,6 +614,7 @@ export default function DesviosGerais() {
         { header: 'Gravidade', key: 'gravidade', width: 15 },
         { header: 'Potencial', key: 'potencial', width: 15 },
         { header: 'Responsável', key: 'responsavel_nome', width: 25 },
+        { header: 'Avaliador', key: 'avaliador_nome', width: 25 },
         { header: 'Data Ocorrência', key: 'data_ocorrencia', width: 15 },
         { header: 'Criado em', key: 'created_at', width: 15 }
       ]
@@ -271,6 +630,7 @@ export default function DesviosGerais() {
           gravidade: desvio.gravidade,
           potencial: desvio.potencial,
           responsavel_nome: desvio.responsavel_nome || 'Não atribuído',
+          avaliador_nome: desvio.avaliador_nome || 'Não definido',
           data_ocorrencia: formatDate(desvio.data_ocorrencia),
           created_at: formatDate(desvio.created_at)
         })
@@ -583,6 +943,9 @@ export default function DesviosGerais() {
                         Responsável
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                        Avaliador
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Ações
                       </th>
                     </tr>
@@ -620,14 +983,26 @@ export default function DesviosGerais() {
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                           {desvio.responsavel_nome || '-'}
                         </td>
+                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                          {desvio.avaliador_nome || '-'}
+                        </td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                          <button
-                            onClick={() => window.open(`/desvios/${desvio.id}`, '_blank')}
-                            className="text-blue-600 hover:text-blue-900 flex items-center gap-1"
-                          >
-                            <Eye className="h-4 w-4" />
-                            Ver
-                          </button>
+                          <div className="flex items-center gap-3">
+                            <button
+                              onClick={() => handleOpenEditModal(desvio)}
+                              className="text-amber-600 hover:text-amber-900 flex items-center gap-1"
+                            >
+                              <Edit className="h-4 w-4" />
+                              Editar
+                            </button>
+                            <button
+                              onClick={() => window.open(`/desvios/${desvio.id}`, '_blank')}
+                              className="text-blue-600 hover:text-blue-900 flex items-center gap-1"
+                            >
+                              <Eye className="h-4 w-4" />
+                              Ver
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -722,6 +1097,264 @@ export default function DesviosGerais() {
             </>
           )}
         </div>
+
+        {showEditModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+            <div className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b px-6 py-4">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Editar desvio</h2>
+                  <p className="text-sm text-gray-500">
+                    Você pode alterar os dados do desvio, exceto a descrição do relato e as informações do relatante.
+                  </p>
+                </div>
+                <button
+                  onClick={closeEditModal}
+                  className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              {editLoading || !editingDesvio ? (
+                <div className="flex items-center justify-center py-16">
+                  <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
+                </div>
+              ) : (
+                <form onSubmit={handleEditSubmit} className="space-y-6 p-6">
+                  <div className="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 bg-gray-50 p-4 md:grid-cols-2">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Relatante</p>
+                      <p className="mt-1 text-sm text-gray-900">{editingDesvio.criador?.nome || '-'}</p>
+                      <p className="text-xs text-gray-500">
+                        Matrícula: {editingDesvio.criador?.matricula || '-'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Equipe do relato</p>
+                      <p className="mt-1 text-sm text-gray-900">{editingDesvio.equipe?.equipe || '-'}</p>
+                      <p className="text-xs text-gray-500">
+                        Avaliador derivado: {editingDesvio.avaliador_nome || '-'}
+                      </p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Descrição do relato</label>
+                      <textarea
+                        value={editingDesvio.descricao || ''}
+                        disabled
+                        rows={4}
+                        className="w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-600"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Local</label>
+                      <select
+                        value={editFormData.local}
+                        onChange={(event) => setEditFormData((prev) => ({ ...prev, local: event.target.value }))}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Selecione</option>
+                        {locais.map((local) => (
+                          <option key={local} value={local}>
+                            {local}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Data da ocorrência</label>
+                      <input
+                        type="date"
+                        value={editFormData.data_ocorrencia}
+                        onChange={(event) => setEditFormData((prev) => ({ ...prev, data_ocorrencia: event.target.value }))}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Natureza</label>
+                      <select
+                        value={editFormData.natureza_id}
+                        onChange={(event) => setEditFormData((prev) => ({ ...prev, natureza_id: event.target.value, tipo_id: '' }))}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Selecione</option>
+                        {naturezas.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Tipo</label>
+                      <select
+                        value={editFormData.tipo_id}
+                        onChange={(event) => setEditFormData((prev) => ({ ...prev, tipo_id: event.target.value }))}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Selecione</option>
+                        {tipos.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Risco associado</label>
+                      <select
+                        value={editFormData.riscoassociado_id}
+                        onChange={(event) => setEditFormData((prev) => ({ ...prev, riscoassociado_id: event.target.value }))}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Selecione</option>
+                        {riscos.map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Responsável</label>
+                      <select
+                        value={editFormData.responsavel}
+                        onChange={(event) => setEditFormData((prev) => ({ ...prev, responsavel: event.target.value }))}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Não atribuído</option>
+                        {responsaveis.map((resp) => (
+                          <option key={resp.matricula} value={resp.matricula}>
+                            {resp.nome}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Potencial</label>
+                      <input
+                        type="text"
+                        value={editFormData.potencial}
+                        disabled
+                        className="w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-600"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Potencial local</label>
+                      <select
+                        value={editFormData.potencial_local}
+                        onChange={(event) => {
+                          const selected = potencialLocalOptions.find((item) => item.label === event.target.value)
+                          setEditFormData((prev) => ({
+                            ...prev,
+                            potencial_local: event.target.value,
+                            potencial: selected?.potencial || prev.potencial
+                          }))
+                        }}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">Selecione</option>
+                        {potencialLocalOptions.map((item) => (
+                          <option key={item.id} value={item.label}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Data conclusão</label>
+                      <input
+                        type="date"
+                        value={editFormData.data_conclusao}
+                        onChange={(event) => setEditFormData((prev) => ({ ...prev, data_conclusao: event.target.value }))}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Ação</label>
+                      <textarea
+                        value={editFormData.acao}
+                        onChange={(event) => setEditFormData((prev) => ({ ...prev, acao: event.target.value }))}
+                        rows={3}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2">
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Observação</label>
+                      <textarea
+                        value={editFormData.observacao}
+                        onChange={(event) => setEditFormData((prev) => ({ ...prev, observacao: event.target.value }))}
+                        rows={3}
+                        className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      />
+                    </div>
+
+                    <div className="md:col-span-2 grid grid-cols-1 gap-4 sm:grid-cols-3">
+                      <label className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={editFormData.ver_agir}
+                          onChange={(event) => setEditFormData((prev) => ({ ...prev, ver_agir: event.target.checked }))}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        Ver &amp; Agir
+                      </label>
+                      <label className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={editFormData.acao_cliente}
+                          onChange={(event) => setEditFormData((prev) => ({ ...prev, acao_cliente: event.target.checked }))}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        Ação cliente
+                      </label>
+                      <label className="flex items-center gap-2 rounded-md border border-gray-200 px-3 py-2 text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          checked={editFormData.gerou_recusa}
+                          onChange={(event) => setEditFormData((prev) => ({ ...prev, gerou_recusa: event.target.checked }))}
+                          className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                        />
+                        Gerou recusa
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-end gap-3 border-t pt-4">
+                    <button
+                      type="button"
+                      onClick={closeEditModal}
+                      className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={savingEdit}
+                      className="inline-flex items-center gap-2 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-60"
+                    >
+                      <Save className="h-4 w-4" />
+                      {savingEdit ? 'Salvando...' : 'Salvar alterações'}
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          </div>
+        )}
       </div>
   )
 }

@@ -128,10 +128,11 @@ export async function GET(request: NextRequest) {
       ?.map((formulario: FormularioComCategoria) => {
         const execucoesConcluidas = formulario.execucoes?.filter(e => e.status === 'concluida') || [];
         const totalExecucoes = formulario.execucoes?.length || 0;
-        const mediaConformidadeFormulario = execucoesConcluidas.length > 0
-          ? execucoesConcluidas
-              .filter(e => e.nota_final !== null)
-              .reduce((acc, e) => acc + (e.nota_final || 0), 0) / execucoesConcluidas.filter(e => e.nota_final !== null).length
+        const execucoesComNota = execucoesConcluidas.filter(
+          (execucao) => typeof execucao.nota_final === 'number'
+        );
+        const mediaConformidadeFormulario = execucoesComNota.length > 0
+          ? execucoesComNota.reduce((acc, execucao) => acc + (execucao.nota_final || 0), 0) / execucoesComNota.length
           : 0;
 
         const categoriaRel = formulario.categoria;

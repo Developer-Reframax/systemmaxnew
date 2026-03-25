@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
+import * as ExcelJS from 'exceljs'
 import {
   Eye,
   Users,
@@ -63,6 +64,33 @@ interface RecentOac {
   desvios: Array<{
     quantidade_desvios: number
   }>
+}
+
+interface OacExportRow {
+  id: string
+  contrato: string
+  datahora_inicio: string
+  created_at: string | null
+  tempo_observacao: number
+  qtd_pessoas_local: number
+  qtd_pessoas_abordadas: number
+  local_nome: string
+  equipe_nome: string
+  observador_matricula: string | number
+  observador_nome: string | null
+  observador_funcao: string | null
+  observador_equipe: string | null
+  observador_letra: string | null
+  total_desvios: number
+  categorias_desvios: string | null
+  topicos_categoria_desvios: string | null
+  subcategorias_desvios: string | null
+  topicos_subcategoria_desvios: string | null
+  desvios_detalhados: string | null
+  acao_recomendada: string | null
+  reconhecimento: string | null
+  condicao_abaixo_padrao: string | null
+  compromisso_formado: string | null
 }
 
 export default function OacDashboard() {
@@ -180,6 +208,111 @@ export default function OacDashboard() {
     return oac.desvios?.reduce((total, desvio) => total + desvio.quantidade_desvios, 0) || 0
   }
 
+  const exportToExcel = async () => {
+    try {
+      const response = await fetch('/api/oac/export', { method: 'GET' })
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        toast.error(data.message || 'Erro ao carregar dados para exportacao')
+        return
+      }
+
+      const oacs: OacExportRow[] = data.data || []
+      if (oacs.length === 0) {
+        toast.error('Nenhuma OAC encontrada para exportacao')
+        return
+      }
+
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('OACs')
+
+      const formatDateTime = (value?: string | null) => {
+        if (!value) return '-'
+        return formatDateTimeFromDatabase(value)
+      }
+
+      worksheet.columns = [
+        { header: 'ID OAC', key: 'id', width: 14 },
+        { header: 'Contrato', key: 'contrato', width: 16 },
+        { header: 'Data/Hora inicio', key: 'datahora_inicio', width: 22 },
+        { header: 'Data/Hora cadastro', key: 'created_at', width: 22 },
+        { header: 'Tempo observacao (min)', key: 'tempo_observacao', width: 22 },
+        { header: 'Pessoas no local', key: 'qtd_pessoas_local', width: 18 },
+        { header: 'Pessoas abordadas', key: 'qtd_pessoas_abordadas', width: 18 },
+        { header: 'Local', key: 'local_nome', width: 28 },
+        { header: 'Equipe', key: 'equipe_nome', width: 24 },
+        { header: 'Matricula observador', key: 'observador_matricula', width: 18 },
+        { header: 'Nome observador', key: 'observador_nome', width: 28 },
+        { header: 'Funcao observador', key: 'observador_funcao', width: 24 },
+        { header: 'Equipe observador', key: 'observador_equipe', width: 24 },
+        { header: 'Letra observador', key: 'observador_letra', width: 16 },
+        { header: 'Total desvios', key: 'total_desvios', width: 14 },
+        { header: 'Categorias dos desvios', key: 'categorias_desvios', width: 36 },
+        { header: 'Topicos da categoria', key: 'topicos_categoria_desvios', width: 36 },
+        { header: 'Subcategorias dos desvios', key: 'subcategorias_desvios', width: 36 },
+        { header: 'Topicos da subcategoria', key: 'topicos_subcategoria_desvios', width: 36 },
+        { header: 'Desvios detalhados', key: 'desvios_detalhados', width: 80 },
+        { header: 'Acao recomendada', key: 'acao_recomendada', width: 40 },
+        { header: 'Reconhecimento', key: 'reconhecimento', width: 40 },
+        { header: 'Condicao abaixo do padrao', key: 'condicao_abaixo_padrao', width: 40 },
+        { header: 'Compromisso firmado', key: 'compromisso_formado', width: 40 }
+      ]
+
+      oacs.forEach((oac) => {
+        worksheet.addRow({
+          id: oac.id,
+          contrato: oac.contrato || '-',
+          datahora_inicio: formatDateTime(oac.datahora_inicio),
+          created_at: formatDateTime(oac.created_at),
+          tempo_observacao: oac.tempo_observacao ?? '-',
+          qtd_pessoas_local: oac.qtd_pessoas_local ?? '-',
+          qtd_pessoas_abordadas: oac.qtd_pessoas_abordadas ?? '-',
+          local_nome: oac.local_nome || '-',
+          equipe_nome: oac.equipe_nome || '-',
+          observador_matricula: oac.observador_matricula ?? '-',
+          observador_nome: oac.observador_nome || '-',
+          observador_funcao: oac.observador_funcao || '-',
+          observador_equipe: oac.observador_equipe || '-',
+          observador_letra: oac.observador_letra || '-',
+          total_desvios: oac.total_desvios ?? 0,
+          categorias_desvios: oac.categorias_desvios || '-',
+          topicos_categoria_desvios: oac.topicos_categoria_desvios || '-',
+          subcategorias_desvios: oac.subcategorias_desvios || '-',
+          topicos_subcategoria_desvios: oac.topicos_subcategoria_desvios || '-',
+          desvios_detalhados: oac.desvios_detalhados || '-',
+          acao_recomendada: oac.acao_recomendada || '-',
+          reconhecimento: oac.reconhecimento || '-',
+          condicao_abaixo_padrao: oac.condicao_abaixo_padrao || '-',
+          compromisso_formado: oac.compromisso_formado || '-'
+        })
+      })
+
+      worksheet.getRow(1).font = { bold: true }
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE6F3FF' }
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `oacs-${new Date().toISOString().split('T')[0]}.xlsx`
+      link.click()
+      window.URL.revokeObjectURL(url)
+
+      toast.success('Exportacao concluida com sucesso')
+    } catch (error) {
+      console.error('Erro ao exportar OACs:', error)
+      toast.error('Erro ao exportar OACs')
+    }
+  }
+
   if (loading) {
     return (
         <div className="flex items-center justify-center h-64">
@@ -236,7 +369,11 @@ export default function OacDashboard() {
               <option value="365">Último ano</option>
             </select>
 
-            <button className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors flex items-center">
+            <button
+              type="button"
+              onClick={exportToExcel}
+              className="bg-blue-600 text-white px-3 py-1 rounded-md text-sm hover:bg-blue-700 transition-colors flex items-center"
+            >
               <Download className="h-4 w-4 mr-1" />
               Exportar
             </button>
