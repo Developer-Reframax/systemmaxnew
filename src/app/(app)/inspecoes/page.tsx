@@ -168,6 +168,10 @@ export default function InspecoesDashboard() {
     }
   };
 
+  const formatPercentage = (value: number | null | undefined) => (
+    typeof value === 'number' && Number.isFinite(value) ? value.toFixed(1) : '0.0'
+  );
+
   return (
       <div className="container mx-auto p-6 space-y-6">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
@@ -278,7 +282,7 @@ export default function InspecoesDashboard() {
                 </CardHeader>
                 <CardContent className="pt-0">
                   <div className="text-2xl font-semibold text-gray-900">
-                    {stats.resumo_geral.media_conformidade.toFixed(1)}%
+                    {formatPercentage(stats.resumo_geral.media_conformidade)}%
                   </div>
                   <p className="text-xs text-gray-500">últimos 30 dias</p>
                 </CardContent>
@@ -336,7 +340,7 @@ export default function InspecoesDashboard() {
                             {form.total_execucoes} execuções
                           </p>
                           <p className="text-xs text-gray-500">
-                            Média {form.media_conformidade.toFixed(1)}%
+                            Média {formatPercentage(form.media_conformidade)}%
                           </p>
                         </div>
                       </div>
@@ -384,9 +388,9 @@ export default function InspecoesDashboard() {
                             <Badge variant="outline" className={statusProps.className}>
                               {statusProps.label}
                             </Badge>
-                            {execucao.nota_final !== null && (
+                            {typeof execucao.nota_final === 'number' && Number.isFinite(execucao.nota_final) && (
                               <p className="text-xs text-gray-600 mt-1">
-                                Nota {execucao.nota_final.toFixed(1)}%
+                                Nota {formatPercentage(execucao.nota_final)}%
                               </p>
                             )}
                           </div>
