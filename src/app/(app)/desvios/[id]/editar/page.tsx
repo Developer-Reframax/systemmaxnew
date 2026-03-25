@@ -21,7 +21,6 @@ type Desvio = {
   ver_agir?: boolean | null
   acao_cliente?: boolean | null
   gerou_recusa?: boolean | null
-  data_limite?: string | null
   data_conclusao?: string | null
   data_ocorrencia?: string | null
   acao?: string | null
@@ -255,7 +254,7 @@ export default function EditarDesvio() {
   }, [formData.natureza_id, user?.contrato_raiz, desvio?.contrato, formData.contrato])
 
   const requiredMissing = useMemo(() => {
-    return !formData.descricao.trim() || !formData.local.trim() || !formData.natureza_id || !formData.tipo_id || !formData.riscoassociado_id || !formData.potencial
+    return !formData.local.trim() || !formData.natureza_id || !formData.tipo_id || !formData.riscoassociado_id || !formData.potencial
   }, [formData])
 
   const statusOptions = useMemo(() => {
@@ -268,7 +267,7 @@ export default function EditarDesvio() {
     if (!desvio) return
 
     if (requiredMissing) {
-      toast.error('Preencha descricao, local, natureza, tipo, risco associado e potencial')
+      toast.error('Preencha local, natureza, tipo, risco associado e potencial')
       return
     }
 
@@ -276,9 +275,7 @@ export default function EditarDesvio() {
     try {
       const payload = {
         id: desvio.id,
-        descricao: formData.descricao.trim(),
         local: formData.local.trim(),
-        contrato: formData.contrato || null,
         natureza_id: formData.natureza_id || null,
         tipo_id: formData.tipo_id || null,
         riscoassociado_id: formData.riscoassociado_id || null,
@@ -289,8 +286,7 @@ export default function EditarDesvio() {
         gerou_recusa: formData.gerou_recusa,
         status: formData.status || null,
         acao: formData.acao || null,
-        observacao: formData.observacao || null,
-        equipe_id: formData.equipe_id || null
+        observacao: formData.observacao || null
       }
 
       const response = await fetch('/api/desvios', {
@@ -348,7 +344,7 @@ export default function EditarDesvio() {
         </button>
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Editar desvio</h1>
-          <p className="text-sm text-gray-500">Atualize qualquer informacao do desvio.</p>
+          <p className="text-sm text-gray-500">Atualize os dados do desvio. Descrição e informações do relatante permanecem bloqueadas.</p>
         </div>
       </div>
 
@@ -358,9 +354,9 @@ export default function EditarDesvio() {
             <label className="block text-sm font-medium text-gray-700 mb-1">Descricao</label>
             <textarea
               value={formData.descricao}
-              onChange={(event) => setFormData((prev) => ({ ...prev, descricao: event.target.value }))}
+              disabled
               rows={5}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-600"
             />
           </div>
 

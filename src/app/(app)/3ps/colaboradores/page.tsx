@@ -19,6 +19,30 @@ interface Colaborador3P {
   fez3p: boolean
 }
 
+interface ExportRow3PColaborador {
+  registro_id: number
+  data_hora_registro: string | null
+  area_id: number | null
+  area: string | null
+  contrato: string | null
+  atividade: string | null
+  tipo_3p: string | null
+  paralisacao_realizada: boolean | null
+  riscos_avaliados: boolean | null
+  ambiente_avaliado: boolean | null
+  passo_descrito: boolean | null
+  hipoteses_levantadas: boolean | null
+  atividade_segura: boolean | null
+  tipo_vinculo: string
+  matricula_colaborador: number | null
+  nome_colaborador: string | null
+  funcao_colaborador: string | null
+  equipe_colaborador: string | null
+  letra_colaborador: string | null
+  matricula_criador: number | null
+  nome_criador: string | null
+}
+
 export default function Colaboradores3P() {
   const [colaboradores, setColaboradores] = useState<Colaborador3P[]>([])
   const [loading, setLoading] = useState(true)
@@ -50,34 +74,90 @@ export default function Colaboradores3P() {
 
   const exportToExcel = async () => {
     try {
+      const response = await fetch('/api/3ps/colaboradores/export', { method: 'GET' })
+      const data = await response.json()
+
+      if (!response.ok || !data.success) {
+        toast.error(data.error || 'Erro ao carregar dados para exportacao')
+        return
+      }
+
+      const registros: ExportRow3PColaborador[] = data.data || []
       const workbook = new ExcelJS.Workbook()
-      const worksheet = workbook.addWorksheet('Colaboradores 3P')
+      const worksheet = workbook.addWorksheet('Registros 3P')
+
+      const formatDate = (value?: string | null) => {
+        if (!value) return '-'
+        const parsed = new Date(value)
+        if (Number.isNaN(parsed.getTime())) return '-'
+        return parsed.toLocaleDateString('pt-BR')
+      }
+
+      const formatTime = (value?: string | null) => {
+        if (!value) return '-'
+        const parsed = new Date(value)
+        if (Number.isNaN(parsed.getTime())) return '-'
+        return parsed.toLocaleTimeString('pt-BR', {
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })
+      }
+
+      const formatBoolean = (value: boolean | null) => {
+        if (value === null) return '-'
+        return value ? 'Sim' : 'Nao'
+      }
 
       worksheet.columns = [
-        { header: 'Matricula', key: 'matricula', width: 12 },
-        { header: 'Nome', key: 'nome', width: 28 },
-        { header: 'Funcao', key: 'funcao', width: 20 },
-        { header: 'Equipe', key: 'equipe', width: 18 },
-        { header: 'Letra', key: 'letra', width: 10 },
-        { header: 'Data realizacao 3P', key: 'dataRealizacao3p', width: 22 },
-        { header: 'Fez 3P', key: 'fez3p', width: 10 },
-        { header: 'Criados', key: 'createdCount', width: 10 },
-        { header: 'Participacoes', key: 'participatedCount', width: 15 },
-        { header: 'Total', key: 'totalCount', width: 10 }
+        { header: 'Registro ID', key: 'registro_id', width: 12 },
+        { header: 'Data do registro', key: 'data_registro', width: 16 },
+        { header: 'Hora do registro', key: 'hora_registro', width: 14 },
+        { header: 'Tipo vinculo', key: 'tipo_vinculo', width: 16 },
+        { header: 'Matricula colaborador', key: 'matricula_colaborador', width: 18 },
+        { header: 'Nome colaborador', key: 'nome_colaborador', width: 28 },
+        { header: 'Funcao colaborador', key: 'funcao_colaborador', width: 22 },
+        { header: 'Equipe colaborador', key: 'equipe_colaborador', width: 22 },
+        { header: 'Letra colaborador', key: 'letra_colaborador', width: 16 },
+        { header: 'Matricula criador', key: 'matricula_criador', width: 16 },
+        { header: 'Nome criador', key: 'nome_criador', width: 28 },
+        { header: 'Area ID', key: 'area_id', width: 10 },
+        { header: 'Area', key: 'area', width: 24 },
+        { header: 'Contrato', key: 'contrato', width: 18 },
+        { header: 'Atividade', key: 'atividade', width: 50 },
+        { header: 'Tipo 3P', key: 'tipo_3p', width: 16 },
+        { header: 'Paralisacao realizada', key: 'paralisacao_realizada', width: 20 },
+        { header: 'Riscos avaliados', key: 'riscos_avaliados', width: 18 },
+        { header: 'Ambiente avaliado', key: 'ambiente_avaliado', width: 18 },
+        { header: 'Passo descrito', key: 'passo_descrito', width: 18 },
+        { header: 'Hipoteses levantadas', key: 'hipoteses_levantadas', width: 22 },
+        { header: 'Atividade segura', key: 'atividade_segura', width: 18 }
       ]
 
-      colaboradores.forEach((colaborador) => {
+      registros.forEach((registro) => {
         worksheet.addRow({
-          matricula: colaborador.matricula,
-          nome: colaborador.nome,
-          funcao: colaborador.funcao || '-',
-          equipe: colaborador.equipe || '-',
-          letra: colaborador.letra || '-',
-          dataRealizacao3p: colaborador.dataRealizacao3p || '-',
-          fez3p: colaborador.fez3p ? 'Sim' : 'Nao',
-          createdCount: colaborador.createdCount,
-          participatedCount: colaborador.participatedCount,
-          totalCount: colaborador.totalCount
+          registro_id: registro.registro_id,
+          data_registro: formatDate(registro.data_hora_registro),
+          hora_registro: formatTime(registro.data_hora_registro),
+          tipo_vinculo: registro.tipo_vinculo,
+          matricula_colaborador: registro.matricula_colaborador ?? '-',
+          nome_colaborador: registro.nome_colaborador || '-',
+          funcao_colaborador: registro.funcao_colaborador || '-',
+          equipe_colaborador: registro.equipe_colaborador || '-',
+          letra_colaborador: registro.letra_colaborador || '-',
+          matricula_criador: registro.matricula_criador ?? '-',
+          nome_criador: registro.nome_criador || '-',
+          area_id: registro.area_id ?? '-',
+          area: registro.area || '-',
+          contrato: registro.contrato || '-',
+          atividade: registro.atividade || '-',
+          tipo_3p: registro.tipo_3p || '-',
+          paralisacao_realizada: formatBoolean(registro.paralisacao_realizada),
+          riscos_avaliados: formatBoolean(registro.riscos_avaliados),
+          ambiente_avaliado: formatBoolean(registro.ambiente_avaliado),
+          passo_descrito: formatBoolean(registro.passo_descrito),
+          hipoteses_levantadas: formatBoolean(registro.hipoteses_levantadas),
+          atividade_segura: formatBoolean(registro.atividade_segura)
         })
       })
 

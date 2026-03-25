@@ -8,6 +8,23 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 const SESMT_FUNCTIONALITY_SLUG = 'relatos-sesmt'
+const EDITABLE_DESVIO_FIELDS = [
+  'local',
+  'natureza_id',
+  'tipo_id',
+  'riscoassociado_id',
+  'potencial',
+  'potencial_local',
+  'ver_agir',
+  'acao_cliente',
+  'gerou_recusa',
+  'status',
+  'acao',
+  'observacao',
+  'observacoes_avaliacao',
+  'responsavel',
+  'data_conclusao'
+] as const
 
 function normalizeForeignKey(value: unknown) {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -25,6 +42,33 @@ function normalizeForeignKey(value: unknown) {
 
 function normalizeContractValue(value: unknown) {
   return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
+function normalizeOptionalString(value: unknown) {
+  if (typeof value !== 'string') {
+    return value ?? null
+  }
+
+  const trimmed = value.trim()
+  return trimmed ? trimmed : null
+}
+
+function normalizeOccurrenceDateToCreatedAt(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const parsedDate = new Date(`${trimmed}T00:00:00`)
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null
+  }
+
+  return new Date(`${trimmed}T12:00:00.000Z`).toISOString()
 }
 
 async function userHasSesmtPermission(
@@ -200,34 +244,88 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Buscar nomes dos responsáveis individualmente
-    const desviosComResponsaveis = await Promise.all(
-      (desvios || []).map(async (desvio) => {
-        if (desvio.responsavel) {
-          try {
-            const { data: responsavelData, error: responsavelError } = await supabase
-              .from('usuarios')
-              .select('nome')
-              .eq('matricula', desvio.responsavel)
-              .single()
-
-            if (!responsavelError && responsavelData) {
-              return {
-                ...desvio,
-                responsavel_nome: responsavelData.nome
-              }
-            }
-          } catch (err) {
-            console.error(`Erro ao buscar responsável ${desvio.responsavel}:`, err)
-          }
-        }
-        
-        return {
-          ...desvio,
-          responsavel_nome: null
-        }
-      })
+    const responsavelIds = Array.from(
+      new Set(
+        (desvios || [])
+          .map((desvio) => desvio.responsavel)
+          .filter((value): value is string | number => value !== null && value !== undefined && value !== '')
+          .map(String)
+      )
     )
+
+    const equipeIds = Array.from(
+      new Set(
+        (desvios || [])
+          .map((desvio) => desvio.equipe_id)
+          .filter((value): value is string | number => value !== null && value !== undefined && value !== '')
+          .map(String)
+      )
+    )
+
+    const [
+      { data: responsaveisData, error: responsaveisError },
+      { data: equipesData, error: equipesDataError }
+    ] = await Promise.all([
+      responsavelIds.length > 0
+        ? supabase.from('usuarios').select('matricula, nome').in('matricula', responsavelIds)
+        : Promise.resolve({ data: [], error: null }),
+      equipeIds.length > 0
+        ? supabase
+            .from('equipes')
+            .select('id, supervisor')
+            .in('id', equipeIds)
+        : Promise.resolve({ data: [], error: null })
+    ])
+
+    if (responsaveisError) {
+      console.error('Erro ao buscar responsáveis dos desvios:', responsaveisError)
+    }
+
+    if (equipesDataError) {
+      console.error('Erro ao buscar avaliadores dos desvios:', equipesDataError)
+    }
+
+    const supervisorIds = Array.from(
+      new Set(
+        (equipesData || [])
+          .map((equipe) => equipe.supervisor)
+          .filter((value): value is string | number => value !== null && value !== undefined && value !== '')
+          .map(String)
+      )
+    )
+
+    const { data: supervisoresData, error: supervisoresError } = supervisorIds.length > 0
+      ? await supabase.from('usuarios').select('matricula, nome').in('matricula', supervisorIds)
+      : { data: [], error: null }
+
+    if (supervisoresError) {
+      console.error('Erro ao buscar supervisores avaliadores dos desvios:', supervisoresError)
+    }
+
+    const responsavelNomeByMatricula = new Map(
+      (responsaveisData || []).map((responsavel) => [String(responsavel.matricula), responsavel.nome])
+    )
+
+    const supervisorNomeByMatricula = new Map(
+      (supervisoresData || []).map((supervisor) => [String(supervisor.matricula), supervisor.nome])
+    )
+
+    const avaliadorNomeByEquipeId = new Map(
+      (equipesData || []).map((equipe) => [
+        String(equipe.id),
+        equipe.supervisor ? supervisorNomeByMatricula.get(String(equipe.supervisor)) || null : null
+      ])
+    )
+
+    const desviosComResponsaveis = (desvios || []).map((desvio) => ({
+      ...desvio,
+      responsavel_nome: desvio.responsavel
+        ? responsavelNomeByMatricula.get(String(desvio.responsavel)) || null
+        : null,
+      avaliador_nome: desvio.equipe_id
+        ? avaliadorNomeByEquipeId.get(String(desvio.equipe_id)) || null
+        : null
+    }))
 
     const totalPages = Math.ceil((count || 0) / limit)
 
@@ -472,7 +570,7 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { id, ...updateData } = body
+    const { id } = body
 
     if (!id) {
       return NextResponse.json(
@@ -495,22 +593,76 @@ export async function PUT(request: NextRequest) {
       )
     }
 
-    // Verificar permissão - usuário pode editar apenas seus próprios desvios ou ser Admin/Editor
-    const userRole = authResult.user?.role
-    const isOwner = existingDesvio.matricula_user === authResult.user?.matricula
-    const hasPermission = ['Admin', 'Editor'].includes(userRole || '') || isOwner
+    const userContract = normalizeContractValue(authResult.user?.contrato_raiz)
+    const desvioContract = normalizeContractValue(existingDesvio.contrato)
+    const hasPermission = Boolean(userContract) && userContract === desvioContract
 
     if (!hasPermission) {
       return NextResponse.json(
-        { success: false, message: 'Acesso negado - permissão insuficiente' },
+        { success: false, message: 'Acesso negado - contrato divergente para edição deste desvio' },
         { status: 403 }
+      )
+    }
+
+    const sanitizedUpdateData = EDITABLE_DESVIO_FIELDS.reduce<Record<string, unknown>>((acc, field) => {
+      if (!(field in body)) {
+        return acc
+      }
+
+      const value = body[field]
+
+      if (['natureza_id', 'tipo_id', 'riscoassociado_id', 'responsavel'].includes(field)) {
+        acc[field] = normalizeForeignKey(value)
+        return acc
+      }
+
+      if (['ver_agir', 'acao_cliente', 'gerou_recusa'].includes(field)) {
+        acc[field] = Boolean(value)
+        return acc
+      }
+
+      if (['local', 'potencial', 'potencial_local', 'status', 'acao', 'observacao', 'observacoes_avaliacao'].includes(field)) {
+        acc[field] = normalizeOptionalString(value)
+        return acc
+      }
+
+      if (['data_ocorrencia', 'data_conclusao'].includes(field)) {
+        acc[field] = normalizeOptionalString(value)
+        return acc
+      }
+
+      acc[field] = value
+      return acc
+    }, {})
+
+    if ('data_ocorrencia' in body) {
+      const createdAtFromOccurrence = normalizeOccurrenceDateToCreatedAt(body.data_ocorrencia)
+      if (body.data_ocorrencia && !createdAtFromOccurrence) {
+        return NextResponse.json(
+          { success: false, message: 'Data de ocorrência inválida' },
+          { status: 400 }
+        )
+      }
+
+      if (createdAtFromOccurrence) {
+        sanitizedUpdateData.created_at = createdAtFromOccurrence
+      }
+    }
+
+    if (Object.keys(sanitizedUpdateData).length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Nenhum campo editável foi informado. Descrição e dados do relatante não podem ser alterados.'
+        },
+        { status: 400 }
       )
     }
 
     // Atualizar desvio
     const { data: updatedDesvio, error } = await supabase
       .from('desvios')
-      .update({ ...updateData, updated_at: new Date().toISOString() })
+      .update({ ...sanitizedUpdateData, updated_at: new Date().toISOString() })
       .eq('id', id)
       .select(`
         *,

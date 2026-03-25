@@ -69,6 +69,25 @@ export async function GET(
       responsavelInfo = resp
     }
 
+    let avaliadorNome: string | null = null
+    if (desvio.equipe_id) {
+      const { data: equipeSupervisor } = await supabase
+        .from('equipes')
+        .select('supervisor')
+        .eq('id', desvio.equipe_id)
+        .maybeSingle()
+
+      if (equipeSupervisor?.supervisor) {
+        const { data: supervisorInfo } = await supabase
+          .from('usuarios')
+          .select('nome')
+          .eq('matricula', equipeSupervisor.supervisor)
+          .maybeSingle()
+
+        avaliadorNome = supervisorInfo?.nome || null
+      }
+    }
+
     // Buscar imagens do desvio
     const { data: imagens } = await supabase
       .from('imagens_desvios')
@@ -81,6 +100,7 @@ export async function GET(
       data: {
         ...desvio,
         criador,
+        avaliador_nome: avaliadorNome,
         responsavel_info: responsavelInfo,
         imagens: imagens || []
       }
