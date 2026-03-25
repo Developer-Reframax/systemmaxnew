@@ -24,14 +24,27 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') || '10')
     const offset = (page - 1) * limit
 
+    let effectiveContract = contrato
+    if (authResult.user?.matricula) {
+      const { data: usuarioContrato } = await supabase
+        .from('usuarios')
+        .select('contrato_raiz')
+        .eq('matricula', authResult.user.matricula)
+        .maybeSingle()
+
+      if (usuarioContrato?.contrato_raiz) {
+        effectiveContract = usuarioContrato.contrato_raiz
+      }
+    }
+
     let query = supabase
       .from('natureza')
       .select('*', { count: 'exact' })
       .order('created_at', { ascending: false })
 
     // Filtrar por contrato se especificado
-    if (contrato) {
-      query = query.eq('contrato', contrato)
+    if (effectiveContract) {
+      query = query.eq('contrato', effectiveContract)
     }
 
     // Aplicar paginação

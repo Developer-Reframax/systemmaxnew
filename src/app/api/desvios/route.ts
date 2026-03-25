@@ -9,6 +9,24 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 const SESMT_FUNCTIONALITY_SLUG = 'relatos-sesmt'
 
+function normalizeForeignKey(value: unknown) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    if (!trimmed) return null
+    return trimmed
+  }
+
+  return null
+}
+
+function normalizeContractValue(value: unknown) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : ''
+}
+
 async function userHasSesmtPermission(
   user: NonNullable<Awaited<ReturnType<typeof verifyJWTToken>>['user']>
 ) {
@@ -246,22 +264,48 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json()
-    const {
-      descricao,
-      natureza_id,
-      contrato,
-      local,
-      riscoassociado_id,
-      tipo_id,
-      potencial,
-      ver_agir = false,
-      acao_cliente = false,
-      gerou_recusa = false,
-      potencial_local
-    } = body
+    const descricao = typeof body.descricao === 'string' ? body.descricao.trim() : ''
+    const local = typeof body.local === 'string' ? body.local.trim() : ''
+    const dataOcorrencia =
+      typeof body.data_ocorrencia === 'string' && body.data_ocorrencia
+        ? body.data_ocorrencia
+        : new Date().toISOString().split('T')[0]
+    const acao = typeof body.acao === 'string' ? body.acao.trim() : ''
+    const natureza_id = normalizeForeignKey(body.natureza_id)
+    const tipo_id = normalizeForeignKey(body.tipo_id)
+    const riscoassociado_id = normalizeForeignKey(body.riscoassociado_id)
+    const potencial = typeof body.potencial === 'string' ? body.potencial.trim() : ''
+    const potencial_local =
+      typeof body.potencial_local === 'string' ? body.potencial_local.trim() : null
+    const ver_agir = Boolean(body.ver_agir)
+    const acao_cliente = Boolean(body.acao_cliente)
+    const gerou_recusa = Boolean(body.gerou_recusa)
+    const matriculaUsuario = authResult.user?.matricula
+
+    if (!matriculaUsuario) {
+      return NextResponse.json(
+        { success: false, message: 'Matricula do usuario autenticado nao encontrada' },
+        { status: 400 }
+      )
+    }
+
+    const { data: usuarioContrato, error: usuarioContratoError } = await supabase
+      .from('usuarios')
+      .select('contrato_raiz')
+      .eq('matricula', matriculaUsuario)
+      .single()
+
+    if (usuarioContratoError || !usuarioContrato?.contrato_raiz) {
+      return NextResponse.json(
+        { success: false, message: 'Contrato raiz do usuario nao encontrado' },
+        { status: 400 }
+      )
+    }
+
+    const contratoUsuario = usuarioContrato.contrato_raiz.trim()
 
     // Validar campos obrigatórios
-    if (!descricao || !natureza_id || !contrato || !local || !riscoassociado_id || !tipo_id || !potencial) {
+    if (!descricao || !natureza_id || !local || !riscoassociado_id || !tipo_id || !potencial) {
       return NextResponse.json(
         { success: false, message: 'Todos os campos obrigatórios devem ser preenchidos' },
         { status: 400 }
@@ -273,6 +317,74 @@ export async function POST(request: NextRequest) {
     if (!validPotenciais.includes(potencial)) {
       return NextResponse.json(
         { success: false, message: 'Potencial inválido' },
+        { status: 400 }
+      )
+    }
+
+    const parsedDataOcorrencia = new Date(`${dataOcorrencia}T00:00:00`)
+    const createdAtOcorrencia = new Date(`${dataOcorrencia}T12:00:00.000Z`)
+    const hoje = new Date()
+    hoje.setHours(0, 0, 0, 0)
+
+    if (
+      Number.isNaN(parsedDataOcorrencia.getTime()) ||
+      Number.isNaN(createdAtOcorrencia.getTime()) ||
+      parsedDataOcorrencia > hoje
+    ) {
+      return NextResponse.json(
+        { success: false, message: 'Data de ocorrencia invalida' },
+        { status: 400 }
+      )
+    }
+
+    const [
+      { data: natureza, error: naturezaError },
+      { data: risco, error: riscoError }
+    ] = await Promise.all([
+      supabase
+        .from('natureza')
+        .select('id, contrato, natureza')
+        .eq('id', natureza_id)
+        .single(),
+      supabase.from('riscos_associados').select('id').eq('id', riscoassociado_id).single()
+    ])
+
+    let naturezaValidada = natureza
+    let naturezaIdResolvido = natureza_id
+
+    if (
+      !naturezaError &&
+      natureza &&
+      normalizeContractValue(natureza.contrato) !== normalizeContractValue(contratoUsuario) &&
+      natureza.natureza
+    ) {
+      const { data: naturezaFallback } = await supabase
+        .from('natureza')
+        .select('id, contrato, natureza')
+        .eq('natureza', natureza.natureza)
+        .eq('contrato', contratoUsuario)
+        .maybeSingle()
+
+      if (naturezaFallback) {
+        naturezaValidada = naturezaFallback
+        naturezaIdResolvido = naturezaFallback.id
+      }
+    }
+
+    if (
+      naturezaError ||
+      !naturezaValidada ||
+      normalizeContractValue(naturezaValidada.contrato) !== normalizeContractValue(contratoUsuario)
+    ) {
+      return NextResponse.json(
+        { success: false, message: 'Natureza invalida para o contrato do usuario' },
+        { status: 400 }
+      )
+    }
+
+    if (riscoError || !risco) {
+      return NextResponse.json(
+        { success: false, message: 'Risco associado invalido' },
         { status: 400 }
       )
     }
@@ -301,8 +413,9 @@ export async function POST(request: NextRequest) {
       .insert({
         matricula_user: authResult.user?.matricula,
         descricao,
-        natureza_id,
-        contrato,
+        created_at: createdAtOcorrencia.toISOString(),
+        natureza_id: naturezaIdResolvido,
+        contrato: contratoUsuario,
         local,
         riscoassociado_id,
         tipo_id,
@@ -311,6 +424,7 @@ export async function POST(request: NextRequest) {
         acao_cliente,
         gerou_recusa,
         potencial_local,
+        acao: acao || null,
         status,
         data_conclusao,
         equipe_id: equipe.equipe_id

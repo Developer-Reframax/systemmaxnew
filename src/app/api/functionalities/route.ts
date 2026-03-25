@@ -1,13 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyToken } from '@/lib/auth'
 import { createClient } from '@supabase/supabase-js'
+import { getUserPermissions, userHasFunctionality } from '@/lib/permissions-server'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-function requireAuth(request: NextRequest) {
+const MANAGE_USER_FUNCTIONALITIES_SLUG = 'editar_funcionalidades_usuarios'
+
+async function requireManageUserFunctionalitiesAccess(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value
   if (!token) {
     return {
@@ -30,25 +33,50 @@ function requireAuth(request: NextRequest) {
     }
   }
 
-  return { user, response: null as NextResponse | null }
-}
+  const canManageUserFunctionalities = await userHasFunctionality(
+    user,
+    MANAGE_USER_FUNCTIONALITIES_SLUG
+  )
 
-// GET - Buscar todas as funcionalidades ativas
-export async function GET(request: NextRequest) {
-  try {
-    // Autenticacao via cookie: apenas verifica presenca/validade basica do JWT
-    const { user, response } = requireAuth(request)
-    if (!user) return response!
-
-    // Permissao: somente Admin ou Editor
-    if (user.role !== 'Admin' && user.role !== 'Editor') {
-      return NextResponse.json(
-        { success: false, error: 'Acesso negado. Apenas Admin e Editor podem gerenciar funcionalidades.' },
+  if (!canManageUserFunctionalities) {
+    return {
+      user: null,
+      response: NextResponse.json(
+        {
+          success: false,
+          error:
+            'Acesso negado. A funcionalidade editar_funcionalidades_usuarios e obrigatoria.'
+        },
         { status: 403 }
       )
     }
+  }
 
-    // Buscar funcionalidades ativas de todos os modulos
+  return { user, response: null as NextResponse | null }
+}
+
+// GET - Buscar apenas as funcionalidades ativas que o usuario logado ja possui
+export async function GET(request: NextRequest) {
+  try {
+    const { user, response } = await requireManageUserFunctionalitiesAccess(request)
+    if (!user) return response!
+
+    const permissions = await getUserPermissions(user)
+    const allowedFunctionalityIds = Array.from(
+      new Set(
+        (permissions?.modulos || []).flatMap((modulo) =>
+          modulo.funcionalidades.map((funcionalidade) => funcionalidade.id)
+        )
+      )
+    )
+
+    if (allowedFunctionalityIds.length === 0) {
+      return NextResponse.json({
+        success: true,
+        functionalities: []
+      })
+    }
+
     const { data: functionalities, error } = await supabase
       .from('modulo_funcionalidades')
       .select(
@@ -61,6 +89,7 @@ export async function GET(request: NextRequest) {
         )
       `
       )
+      .in('id', allowedFunctionalityIds)
       .eq('ativa', true)
       .order('nome')
 
