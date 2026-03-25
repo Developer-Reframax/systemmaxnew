@@ -1,17 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '@/hooks/useAuth'
-import {
-  X,
-  Send,
-  Camera,
-  User,
-  Bot,
-  Loader2
-} from 'lucide-react'
+import { X, Send, Camera, User, Bot, Loader2 } from 'lucide-react'
 import { toast } from 'sonner'
-// Removido cliente Supabase direto - usando API route protegida
 
 interface FormularioConversacionalProps {
   isOpen: boolean
@@ -22,6 +14,7 @@ interface FormularioConversacionalProps {
 interface FormData {
   descricao: string
   local: string
+  data_ocorrencia: string
   natureza_id: string
   tipo_id: string
   potencial: string
@@ -36,53 +29,36 @@ interface FormData {
 interface Natureza {
   id: string
   natureza: string
-  contrato: string
-  created_at: string
-  updated_at: string
-
-}
-
-interface RiscoAssociado {
-  id: string
-  risco_associado: string
-  descricao?: string
-  categoria?: string
-  created_at: string
-  updated_at: string
-}
-
-interface Potenciais {
-  id: string
-  potencial_sede: string
-  potencial_local: string
-  contrato: string
-  created_at: string
-  updated_at: string
 }
 
 interface Tipo {
   id: string
   tipo: string
-  contrato: string
-  created_at: string
-  updated_at: string
+  natureza_id?: string | number | null
+  nature_id?: string | number | null
 }
 
 interface Local {
   id: string
   local: string
-  contrato: string
-  created_at: string
-  updated_at: string
+}
+
+interface Potencial {
+  id: string
+  potencial_sede: string
+  potencial_local: string
+}
+
+interface RiscoAssociado {
+  id: string
+  risco_associado: string
 }
 
 interface ImageFile {
   file: File
   preview: string
-  categoria: 'desvio' | 'evidencia'
+  categoria: 'evidencia'
 }
-
-
 
 interface Message {
   id: string
@@ -96,424 +72,403 @@ interface Question {
   id: string
   text: string
   field: keyof FormData | 'images' | ''
-  type: 'text' | 'textarea' | 'select' | 'radio' | 'checkbox' | 'file' | 'date' | 'button'
+  type: 'text' | 'textarea' | 'select' | 'radio' | 'file' | 'date' | 'button'
   options?: { value: string; label: string }[]
   validation?: (value: unknown) => boolean
   required: boolean
   buttonText?: string
 }
 
-const TYPING_SPEED = 20
-const PAUSE_BETWEEN_MESSAGES = 500
+const TYPING_SPEED = 18
+const PAUSE_BETWEEN_MESSAGES = 400
+const MAX_IMAGE_SIZE = 5 * 1024 * 1024
+const MAX_IMAGES = 5
 
-export default function FormularioConversacional({ isOpen, onClose, onSuccess }: FormularioConversacionalProps) {
-  const { user } = useAuth()
-  const [messages, setMessages] = useState<Message[]>([])
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
-  const [isTyping, setIsTyping] = useState(false)
-  const [loading, setLoading] = useState(false)
-  const [naturezas, setNaturezas] = useState<Natureza[]>([])
-  const [tipos, setTipos] = useState<Tipo[]>([])
-  const [locais, setLocais] = useState<Local[]>([])
-  const [potenciais, setPotenciais] = useState<Potenciais[]>([])
-  const [riscosAssociados, setRiscosAssociados] = useState<RiscoAssociado[]>([])
-  const [images, setImages] = useState<ImageFile[]>([])  
-  const [desvioId, setDesvioId] = useState<string | null>(null) // ðŸ†” ID do desvio cadastrado
-  
-  // ðŸ’¾ SISTEMA DE BACKUP DAS IMAGENS EM LOCALSTORAGE
-  const BACKUP_KEY = 'desvio_images_backup'
-  
-  const saveImagesToBackup = useCallback((imagesToSave: ImageFile[]) => {
-    try {
-      const backupData = {
-        timestamp: new Date().toISOString(),
-        images: imagesToSave.map(img => ({
-          fileName: img.file.name,
-          fileSize: img.file.size,
-          fileType: img.file.type,
-          preview: img.preview,
-          categoria: img.categoria,
-          // NÃ£o salvamos o File object pois nÃ£o Ã© serializÃ¡vel
-        }))
-      }
-      localStorage.setItem(BACKUP_KEY, JSON.stringify(backupData))
-      console.log('BACKUP SALVO:', {
-        quantidade: imagesToSave.length,
-        timestamp: backupData.timestamp
-      })
-    } catch (error) {
-      console.error('Erro ao salvar backup:', error)
-    }
-  }, [])
-  
+function getTodayIsoDate() {
+  return new Date().toISOString().split('T')[0]
+}
 
-  
-  const clearImagesBackup = () => {
-    try {
-      localStorage.removeItem(BACKUP_KEY)
-      console.log('BACKUP LIMPO')
-    } catch (error) {
-      console.error('Erro ao limpar backup:', error)
-    }
-  }
-
-  // ðŸ” WRAPPER PARA DETECTAR MUDANÃ‡AS NO ESTADO DAS IMAGENS COM BACKUP
-  const setImagesWithLog = useCallback((newImages: ImageFile[] | ((prev: ImageFile[]) => ImageFile[])) => {
-    console.log('ðŸ” ===== SETIMAGES CHAMADO =====', {
-      timestamp: new Date().toISOString(),
-      tipoParametro: typeof newImages === 'function' ? 'function' : 'array',
-      estadoAtual: images.length,
-      stackTrace: new Error().stack?.split('\n').slice(1, 5)
-    })
-    
-    if (typeof newImages === 'function') {
-      setImages(prev => {
-        const resultado = newImages(prev)
-        console.log('SETIMAGES EXECUTADO (FUNCTION):', {
-          estadoAnterior: prev.length,
-          novoEstado: resultado.length,
-          diferenca: resultado.length - prev.length
-        })
-        
-        // ðŸ’¾ BACKUP AUTOMÃTICO APÃ“S MUDANÃ‡A
-        if (resultado.length > 0) {
-          saveImagesToBackup(resultado)
-        } else if (prev.length > 0) {
-          // Se estava com imagens e agora estÃ¡ vazio, manter backup por seguranÃ§a
-          console.log('IMAGENS FORAM LIMPAS - MANTENDO BACKUP POR SEGURANÃ‡A')
-        }
-        
-        return resultado
-      })
-    } else {
-      console.log('SETIMAGES EXECUTADO (ARRAY):', {
-        estadoAnterior: images.length,
-        novoEstado: newImages.length,
-        diferenca: newImages.length - images.length
-      })
-      
-      // ðŸ’¾ BACKUP AUTOMÃTICO APÃ“S MUDANÃ‡A
-      if (newImages.length > 0) {
-        saveImagesToBackup(newImages)
-      } else if (images.length > 0) {
-        // Se estava com imagens e agora estÃ¡ vazio, manter backup por seguranÃ§a
-        console.log('IMAGENS FORAM LIMPAS - MANTENDO BACKUP POR SEGURANÃ‡A')
-      }
-      
-      setImages(newImages)
-    }
-  }, [images, saveImagesToBackup])
-  
-  // ðŸ›¡ï¸ VERIFICAÃ‡ÃƒO DE INTEGRIDADE DAS IMAGENS
-  const checkImageIntegrity = useCallback(() => {
-    const backupStr = typeof window !== 'undefined' ? localStorage.getItem(BACKUP_KEY) : null
-    if (!backupStr) return
-    
-    try {
-      const backupData = JSON.parse(backupStr)
-      const backupCount = backupData.images?.length || 0
-      const currentCount = images.length
-      
-      if (backupCount > 0 && currentCount === 0) {
-        console.log('PERDA DE IMAGENS DETECTADA!', {
-          imagensNoBackup: backupCount,
-          imagensAtuais: currentCount,
-          timestampBackup: backupData.timestamp,
-          detalhesBackup: backupData.images.map((img: unknown) => {
-            const imageObj = img as { fileName: string; fileSize: number; categoria: string };
-            return {
-              fileName: imageObj.fileName,
-              fileSize: imageObj.fileSize,
-              categoria: imageObj.categoria
-            };
-          })
-        })
-        
-        // Alertar sobre a perda
-        console.error('Imagens foram perdidas durante o processo!')
-      }
-    } catch (error) {
-      console.error('Erro na verificaÃ§Ã£o de integridade:', error)
-    }
-  }, [images.length])
-
-  // FUNCAO PARA CADASTRAR O DESVIO ANTECIPADAMENTE
-  const cadastrarDesvioAntecipado = async () => {
-    const desvioData = {
-      descricao: formData.descricao,
-      local: formData.local,
-      data_ocorrencia: new Date().toISOString().split('T')[0],
-      natureza_id: parseInt(formData.natureza_id),
-      tipo_id: parseInt(formData.tipo_id),
-      potencial: formData.potencial,
-      potencial_local: formData.potencial_local,
-      contrato: formData.contrato,
-      riscoassociado_id: parseInt(formData.riscoassociado_id),
-      ver_agir: formData.ver_agir,
-      gerou_recusa: formData.gerou_recusa,
-      acao: formData.acao || null
-    }
-    
-    console.log('Cadastrando desvio antecipadamente:', desvioData)
-    
-    const response = await fetch('/api/desvios', {
-      method: 'POST',
-      body: JSON.stringify(desvioData)
-    })
-    
-    if (!response.ok) {
-      const errorData = await response.json()
-      throw new Error(`Erro ao cadastrar desvio: ${errorData.message || response.statusText}`)
-    }
-    
-    const result = await response.json()
-    console.log('Desvio cadastrado com sucesso! ID:', result.data.id)
-    
-    // Armazenar o ID do desvio
-    setDesvioId(result.data.id)
-    
-    return result.data.id
-  }
-  const [userInput, setUserInput] = useState('')
-  const [showInput, setShowInput] = useState(false)
-
-  const [messageIdCounter, setMessageIdCounter] = useState(0)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-  const fileInputRef = useRef<HTMLInputElement>(null)
-  
-  const [formData, setFormData] = useState({
+function createInitialFormData(contrato = ''): FormData {
+  return {
     descricao: '',
     local: '',
+    data_ocorrencia: '',
     natureza_id: '',
     tipo_id: '',
     potencial: '',
     potencial_local: '',
-    contrato: user?.contrato_raiz || '',
-    riscoassociado_id: '1',
+    contrato,
+    riscoassociado_id: '',
     ver_agir: false,
     gerou_recusa: false,
     acao: ''
-  })
+  }
+}
 
-  const questions: Question[] = useMemo(() => [
-    {
-      id: 'greeting',
-      text: `Olá, ${user?.nome || 'usuário'}! Vou te ajudar a registrar um novo desvio. Vamos começar?`,
-      field: '',
-      type: 'button',
-      required: false,
-      buttonText: 'Vamos começar!'
-    },
-    {
-      id: 'descricao',
-      text: 'Agora descreva detalhadamente o que aconteceu:',
-      field: 'descricao',
-      type: 'textarea',
-      required: true,
-      validation: (value) => (value as string).length >= 10
-    },
-    {
-      id: 'local',
-      text: 'Onde exatamente ocorreu este desvio?',
-      field: 'local',
-      type: 'select',
-      required: true
-    },
-    {
-      id: 'data_confirmacao',
-      text: `A data da ocorrência é hoje (${new Date().toLocaleDateString('pt-BR')})?`,
-      field: '',
-      type: 'radio',
-      options: [
-        { value: 'sim', label: 'Sim, foi hoje' },
-        { value: 'nao', label: 'Não, foi em outra data' }
-      ],
-      required: true
-    },
-    {
-      id: 'natureza',
-      text: 'Qual é a natureza deste desvio?',
-      field: 'natureza_id',
-      type: 'select',
-      required: true
-    },
-    {
-      id: 'tipo',
-      text: 'Agora me diga qual é o tipo especí­fico:',
-      field: 'tipo_id',
-      type: 'select',
-      required: true
-    },
-    {
-      id: 'potencial',
-      text: 'Qual é o potencial de risco deste desvio?',
-      field: 'potencial_local',
-      type: 'select',
-      required: true
-    },
-    {
-      id: 'risco_associado',
-      text: 'Qual é o risco associado ao desvio?',
-      field: 'riscoassociado_id',
-      type: 'select',
-      required: true
-    },
-    {
-      id: 'ver_agir',
-      text: 'Este desvio foi resolvido de forma imediata (Ver & Agir)?',
-      field: 'ver_agir',
-      type: 'radio',
-      options: [
-        { value: 'true', label: 'Sim, foi resolvido imediatamente' },
-        { value: 'false', label: 'Não, deve passar pelo processo padrão' }
-      ],
-      required: true
-    },
-    {
-      id: 'acao_ver_agir',
-      text: 'Qual ação foi realizada?',
-      field: 'acao',
-      type: 'textarea',
-      required: true,
-      validation: (value) => (value as string).trim().length >= 5
-    },
-    {
-      id: 'gerou_recusa',
-      text: 'Este desvio gerou alguma recusa?',
-      field: 'gerou_recusa',
-      type: 'radio',
-      options: [
-        { value: 'true', label: 'Sim, gerou recusa' },
-        { value: 'false', label: 'Não, não gerou recusa' }
-      ],
-      required: true
-    },
+function buildAutoTitle(descricao: string) {
+  const normalized = descricao.replace(/\s+/g, ' ').trim()
+  if (!normalized) return 'Relato de desvio'
+  return normalized.length > 100 ? `${normalized.slice(0, 97)}...` : normalized
+}
 
-    {
-      id: 'images',
-      text: 'Por último, você tem alguma imagem para anexar? (Opcional)',
-      field: 'images',
-      type: 'file',
-      required: false
+export default function FormularioConversacional({
+  isOpen,
+  onClose,
+  onSuccess
+}: FormularioConversacionalProps) {
+  const { user } = useAuth()
+
+  const [messages, setMessages] = useState<Message[]>([])
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0)
+  const [isTyping, setIsTyping] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const [showInput, setShowInput] = useState(false)
+  const [userInput, setUserInput] = useState('')
+
+  const [naturezas, setNaturezas] = useState<Natureza[]>([])
+  const [tipos, setTipos] = useState<Tipo[]>([])
+  const [locais, setLocais] = useState<Local[]>([])
+  const [potenciais, setPotenciais] = useState<Potencial[]>([])
+  const [riscosAssociados, setRiscosAssociados] = useState<RiscoAssociado[]>([])
+  const [images, setImages] = useState<ImageFile[]>([])
+  const [formData, setFormData] = useState<FormData>(() =>
+    createInitialFormData(user?.contrato_raiz || '')
+  )
+
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const imagesRef = useRef<ImageFile[]>([])
+  const finishConversationRef = useRef<() => Promise<void>>(async () => {})
+  const messageIdCounterRef = useRef(0)
+
+  const nextMessageId = useCallback(() => {
+    const nextId = messageIdCounterRef.current
+    messageIdCounterRef.current += 1
+    return `msg-${nextId}-${Date.now()}`
+  }, [])
+
+  const questions = useMemo<Question[]>(
+    () => [
+      {
+        id: 'greeting',
+        text: `Olá, ${user?.nome || 'usuário'}! Vou te ajudar a registrar um novo desvio. Vamos começar?`,
+        field: '',
+        type: 'button',
+        required: false,
+        buttonText: 'Vamos começar!'
+      },
+      {
+        id: 'descricao',
+        text: 'Agora descreva detalhadamente o que aconteceu:',
+        field: 'descricao',
+        type: 'textarea',
+        required: true,
+        validation: (value) => typeof value === 'string' && value.trim().length >= 10
+      },
+      {
+        id: 'local',
+        text: 'Onde exatamente ocorreu este desvio?',
+        field: 'local',
+        type: 'select',
+        required: true
+      },
+      {
+        id: 'data_confirmacao',
+        text: `A data da ocorrência é hoje (${new Date().toLocaleDateString('pt-BR')})?`,
+        field: '',
+        type: 'radio',
+        options: [
+          { value: 'sim', label: 'Sim, foi hoje' },
+          { value: 'nao', label: 'Não, foi em outra data' }
+        ],
+        required: true
+      },
+      {
+        id: 'data_ocorrencia',
+        text: 'Informe a data em que o desvio ocorreu:',
+        field: 'data_ocorrencia',
+        type: 'date',
+        required: true,
+        validation: (value) => {
+          if (typeof value !== 'string' || !value) return false
+          const chosenDate = new Date(`${value}T00:00:00`)
+          const today = new Date(`${getTodayIsoDate()}T00:00:00`)
+          return !Number.isNaN(chosenDate.getTime()) && chosenDate <= today
+        }
+      },
+      {
+        id: 'natureza',
+        text: 'Qual é a natureza deste desvio?',
+        field: 'natureza_id',
+        type: 'select',
+        required: true
+      },
+      {
+        id: 'tipo',
+        text: 'Agora me diga qual é o tipo específico:',
+        field: 'tipo_id',
+        type: 'select',
+        required: true
+      },
+      {
+        id: 'potencial',
+        text: 'Qual é o potencial de risco deste desvio?',
+        field: 'potencial_local',
+        type: 'select',
+        required: true
+      },
+      {
+        id: 'risco_associado',
+        text: 'Qual é o risco associado ao desvio?',
+        field: 'riscoassociado_id',
+        type: 'select',
+        required: true
+      },
+      {
+        id: 'ver_agir',
+        text: 'Este desvio foi resolvido de forma imediata (Ver & Agir)?',
+        field: 'ver_agir',
+        type: 'radio',
+        options: [
+          { value: 'true', label: 'Sim, foi resolvido imediatamente' },
+          { value: 'false', label: 'Não, deve passar pelo processo padrão' }
+        ],
+        required: true
+      },
+      {
+        id: 'acao_ver_agir',
+        text: 'Qual ação foi realizada?',
+        field: 'acao',
+        type: 'textarea',
+        required: true,
+        validation: (value) => typeof value === 'string' && value.trim().length >= 5
+      },
+      {
+        id: 'gerou_recusa',
+        text: 'Este desvio gerou alguma recusa?',
+        field: 'gerou_recusa',
+        type: 'radio',
+        options: [
+          { value: 'true', label: 'Sim, gerou recusa' },
+          { value: 'false', label: 'Não, não gerou recusa' }
+        ],
+        required: true
+      },
+      {
+        id: 'images',
+        text: 'Por último, você tem alguma imagem para anexar? (Opcional)',
+        field: 'images',
+        type: 'file',
+        required: false
+      }
+    ],
+    [user?.nome]
+  )
+
+  const currentQuestion = questions[currentQuestionIndex]
+
+  const availableTipos = useMemo(() => {
+    if (!formData.natureza_id) return tipos
+
+    const filtered = tipos.filter((tipo) => {
+      const naturezaVinculada = tipo.natureza_id ?? tipo.nature_id
+      if (naturezaVinculada === undefined || naturezaVinculada === null) return false
+      return String(naturezaVinculada) === formData.natureza_id
+    })
+
+    return filtered.length > 0 ? filtered : tipos
+  }, [formData.natureza_id, tipos])
+
+  const scrollToBottom = useCallback(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [])
+
+  const revokeImagePreviews = useCallback((currentImages: ImageFile[]) => {
+    currentImages.forEach((image) => {
+      if (image.preview.startsWith('blob:')) {
+        URL.revokeObjectURL(image.preview)
+      }
+    })
+  }, [])
+
+  const resetForm = useCallback(() => {
+    setMessages([])
+    setCurrentQuestionIndex(0)
+    setIsTyping(false)
+    setLoading(false)
+    setShowInput(false)
+    setUserInput('')
+    messageIdCounterRef.current = 0
+    setFormData(createInitialFormData(user?.contrato_raiz || ''))
+    setImages((prev) => {
+      revokeImagePreviews(prev)
+      return []
+    })
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
-  ], [user?.nome])
+  }, [revokeImagePreviews, user?.contrato_raiz])
 
+  const addUserMessage = useCallback(
+    (content: string) => {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: nextMessageId(),
+          type: 'user',
+          content,
+          timestamp: new Date()
+        }
+      ])
+    },
+    [nextMessageId]
+  )
 
+  const typeMessage = useCallback(
+    async (text: string, type: 'bot' | 'user', callback?: () => void) => {
+      setIsTyping(true)
 
+      const messageId = nextMessageId()
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: messageId,
+          type,
+          content: '',
+          timestamp: new Date(),
+          isTyping: type === 'bot'
+        }
+      ])
 
+      for (let index = 0; index <= text.length; index += 1) {
+        await new Promise((resolve) => setTimeout(resolve, TYPING_SPEED))
+        setMessages((prev) =>
+          prev.map((message) =>
+            message.id === messageId ? { ...message, content: text.slice(0, index) } : message
+          )
+        )
+      }
 
-
-
-  // Mover typeMessage e startConversation para antes do useEffect
-  const typeMessage = useCallback(async (text: string, type: 'bot' | 'user', callback?: () => void) => {
-    setIsTyping(true)
-    
-    const messageId = `msg-${messageIdCounter}-${Date.now()}`
-    setMessageIdCounter(prev => prev + 1)
-    const newMessage: Message = {
-      id: messageId,
-      type,
-      content: '',
-      timestamp: new Date(),
-      isTyping: type === 'bot'
-    }
-
-    setMessages(prev => [...prev, newMessage])
-
-    // Simular digitaÃ§Ã£o
-    for (let i = 0; i <= text.length; i++) {
-      await new Promise(resolve => setTimeout(resolve, TYPING_SPEED))
-      
-      setMessages(prev => 
-        prev.map(msg => 
-          msg.id === messageId 
-            ? { ...msg, content: text.substring(0, i) }
-            : msg
+      setMessages((prev) =>
+        prev.map((message) =>
+          message.id === messageId ? { ...message, isTyping: false } : message
         )
       )
-    }
 
-    // Finalizar mensagem
-    setMessages(prev => 
-      prev.map(msg => 
-        msg.id === messageId 
-          ? { ...msg, isTyping: false }
-          : msg
-      )
-    )
+      setIsTyping(false)
+      if (callback) {
+        setTimeout(callback, 250)
+      }
+    },
+    [nextMessageId]
+  )
 
-    setIsTyping(false)
-    
-    if (callback) {
-      setTimeout(callback, 300)
-    }
-  }, [messageIdCounter])
+  const askQuestion = useCallback(
+    (questionIndex: number) => {
+      const nextQuestion = questions[questionIndex]
+      if (!nextQuestion) return
+
+      setCurrentQuestionIndex(questionIndex)
+      setTimeout(() => {
+        void typeMessage(nextQuestion.text, 'bot', () => {
+          setShowInput(true)
+          scrollToBottom()
+        })
+      }, PAUSE_BETWEEN_MESSAGES)
+    },
+    [questions, scrollToBottom, typeMessage]
+  )
 
   const startConversation = useCallback(() => {
     setMessages([])
     setCurrentQuestionIndex(0)
     setShowInput(false)
     setTimeout(() => {
-      typeMessage(questions[0].text, 'bot', () => {
+      void typeMessage(questions[0].text, 'bot', () => {
         setShowInput(true)
-        setTimeout(() => {
-          scrollToBottom()
-        }, 100)
+        scrollToBottom()
       })
-    }, 500)
-  }, [typeMessage, questions])
+    }, PAUSE_BETWEEN_MESSAGES)
+  }, [questions, scrollToBottom, typeMessage])
 
-  // FunÃ§Ãµes de carregamento de dados
   const loadNaturezas = useCallback(async () => {
+    const contrato = user?.contrato_raiz
+    if (!contrato) return
+
     try {
-      const contrato = user?.contrato_raiz
-      if (!contrato) return
-      const response = await fetch(`/api/security-params/natures?contrato=${encodeURIComponent(contrato)}`, {
-       method: 'GET'
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setNaturezas(data.data || [])
-      }
+      const response = await fetch(
+        `/api/security-params/natures?contrato=${encodeURIComponent(contrato)}&limit=500`,
+        { method: 'GET' }
+      )
+      if (!response.ok) throw new Error('Erro ao carregar naturezas')
+      const data = await response.json()
+      setNaturezas(data.data || [])
     } catch (error) {
       console.error('Error loading naturezas:', error)
+      toast.error('Erro ao carregar naturezas')
     }
   }, [user?.contrato_raiz])
 
-  const loadTipos = useCallback(async (naturezaId: string) => {
+  const loadTipos = useCallback(async () => {
+    const contrato = user?.contrato_raiz
+    if (!contrato) return
+
+    const params = new URLSearchParams({
+      contrato,
+      limit: '500'
+    })
+
+    if (formData.natureza_id) {
+      params.set('nature_id', formData.natureza_id)
+    }
+
     try {
-      const contrato = user?.contrato_raiz
-      if (!contrato) return
-      const response = await fetch(
-        `/api/security-params/types?nature_id=${naturezaId}&contrato=${encodeURIComponent(contrato)}`,
-        {
+      const response = await fetch(`/api/security-params/types?${params.toString()}`, {
         method: 'GET'
       })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setTipos(data.data || [])
-      }
+      if (!response.ok) throw new Error('Erro ao carregar tipos')
+      const data = await response.json()
+      setTipos(data.data || [])
     } catch (error) {
       console.error('Error loading tipos:', error)
+      toast.error('Erro ao carregar tipos')
+    }
+  }, [formData.natureza_id, user?.contrato_raiz])
+
+  const loadLocais = useCallback(async () => {
+    const contrato = user?.contrato_raiz
+    if (!contrato) return
+
+    try {
+      const response = await fetch(
+        `/api/security-params/locations?contrato=${encodeURIComponent(contrato)}&limit=500`,
+        { method: 'GET' }
+      )
+      if (!response.ok) throw new Error('Erro ao carregar locais')
+      const data = await response.json()
+      setLocais(data.data || [])
+    } catch (error) {
+      console.error('Error loading locais:', error)
+      toast.error('Erro ao carregar locais')
     }
   }, [user?.contrato_raiz])
 
   const loadPotenciais = useCallback(async () => {
+    const contrato = user?.contrato_raiz
+    if (!contrato) return
+
     try {
-      const contrato = user?.contrato_raiz
-      if (!contrato) return
-      const response = await fetch(`/api/security-params/potentials?contrato=${encodeURIComponent(contrato)}`, {
-        method: 'GET'
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setPotenciais(data.data || [])
-      }
+      const response = await fetch(
+        `/api/security-params/potentials?contrato=${encodeURIComponent(contrato)}`,
+        { method: 'GET' }
+      )
+      if (!response.ok) throw new Error('Erro ao carregar potenciais')
+      const data = await response.json()
+      setPotenciais(data.data || [])
     } catch (error) {
       console.error('Error loading potenciais:', error)
+      toast.error('Erro ao carregar potenciais')
     }
   }, [user?.contrato_raiz])
 
@@ -522,512 +477,404 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       const response = await fetch('/api/security-params/associated-risks', {
         method: 'GET'
       })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setRiscosAssociados(data.data || [])
-      }
+      if (!response.ok) throw new Error('Erro ao carregar riscos associados')
+      const data = await response.json()
+      setRiscosAssociados(data.data || [])
     } catch (error) {
       console.error('Error loading riscos associados:', error)
+      toast.error('Erro ao carregar riscos associados')
     }
   }, [])
 
-  const loadLocais = useCallback(async () => {
-    try {
-      const contrato = user?.contrato_raiz
-      if (!contrato) return
-      const response = await fetch(`/api/security-params/locations?contrato=${encodeURIComponent(contrato)}&limit=500`, {
-        method: 'GET'
-      })
-      
-      if (response.ok) {
-        const data = await response.json()
-        setLocais(data.data || [])
-      }
-    } catch (error) {
-      console.error('Error loading locais:', error)
-    }
-  }, [user?.contrato_raiz])
-
-  const resetForm = useCallback(() => {
-    // ðŸ§¹ LOG DO RESET DO FORMULÃRIO
-    console.log('ðŸ§¹ ===== RESETFORM CHAMADO (NOVA ABORDAGEM) =====', {
-      timestamp: new Date().toISOString(),
-      desvioIdAntes: desvioId,
-      quantidadeImagens: images.length
-    })
-    
-    setMessages([])
-    setCurrentQuestionIndex(0)
-    setIsTyping(false)
-    setLoading(false)
-    setImagesWithLog([])
-    setUserInput('')
-    setShowInput(false)
-    setMessageIdCounter(0)
-    setDesvioId(null) // Limpar o ID do desvio
-    setFormData({
-      descricao: '',
-      local: '',
-      natureza_id: '',
-      tipo_id: '',
-      potencial: '',
-      potencial_local: '',
-      contrato: user?.contrato_raiz || '',
-      riscoassociado_id: '1',
-      ver_agir: false,
-      gerou_recusa: false,
-      acao: ''
-    })
-    
-    // ðŸ’¾ LIMPAR BACKUP APENAS QUANDO APROPRIADO
-    clearImagesBackup()
-    
-  }, [user?.contrato_raiz]) // eslint-disable-line react-hooks/exhaustive-deps
-
-
+  useEffect(() => {
+    imagesRef.current = images
+  }, [images])
 
   useEffect(() => {
-    if (isOpen) {
-      resetForm() // Limpar dados anteriores apenas quando abre
-      loadNaturezas()
-      loadLocais()
-      loadPotenciais()
-      loadRiscosAssociados()
-      startConversation()
+    if (!isOpen) return undefined
+
+    resetForm()
+    void loadNaturezas()
+    void loadLocais()
+    void loadPotenciais()
+    void loadRiscosAssociados()
+    startConversation()
+
+    return () => {
+      setShowInput(false)
     }
-    // Removido resetForm() quando fecha para preservar estado das imagens durante submissÃ£o
-  }, [isOpen]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [
+    isOpen,
+    loadLocais,
+    loadNaturezas,
+    loadPotenciais,
+    loadRiscosAssociados,
+    resetForm,
+    startConversation
+  ])
 
   useEffect(() => {
-    if (formData.natureza_id) {
-      loadTipos(formData.natureza_id)
-    } else {
-      setTipos([])
-    }
-  }, [formData.natureza_id]) // eslint-disable-line react-hooks/exhaustive-deps
+    if (!isOpen) return
+    void loadTipos()
+  }, [formData.natureza_id, isOpen, loadTipos])
 
   useEffect(() => {
     scrollToBottom()
-  }, [messages])
+  }, [loading, messages, scrollToBottom, showInput])
 
-  // Scroll automÃ¡tico quando showInput muda
   useEffect(() => {
-    if (showInput) {
-      setTimeout(() => {
-        scrollToBottom()
-      }, 100)
+    return () => {
+      revokeImagePreviews(imagesRef.current)
     }
-  }, [showInput])
-  
-  // ðŸ” MONITOR DE MUDANÃ‡AS NO ESTADO DAS IMAGENS COM PROTEÃ‡ÃƒO AUTOMÃTICA
-  useEffect(() => { 
-    // ðŸ’¾ Salvar backup sempre que houver mudanÃ§a
-    if (images.length > 0) {
-      saveImagesToBackup(images)
-    }
-    
-    // ðŸ›¡ï¸ PROTEÃ‡ÃƒO AUTOMÃTICA CONTRA PERDA DE IMAGENS
-    if (images.length === 0 && !loading && !isTyping) {
-      // Verificar se hÃ¡ backup disponÃ­vel
-      const backupStr = typeof window !== 'undefined' ? localStorage.getItem(BACKUP_KEY) : null
-      if (backupStr) {
-        try {
-          const backupData = JSON.parse(backupStr)
-          if (backupData.images && backupData.images.length > 0) {
-            console.log('ðŸ›¡ï¸ DETECTADA PERDA DE IMAGENS - Verificando se Ã© perda legÃ­tima ou erro')
-            
-            // Se nÃ£o estamos no inÃ­cio da conversa e havia imagens no backup, pode ser perda
-            if (currentQuestionIndex > 0) {
-              console.warn('âš ï¸ POSSÃVEL PERDA DE IMAGENS DETECTADA - Backup disponÃ­vel com', backupData.images.length, 'imagens')
+  }, [revokeImagePreviews])
+
+  const getDisplayValue = useCallback(
+    (question: Question, value: string | number | boolean) => {
+      const rawValue = String(value)
+
+      if (question.id === 'data_ocorrencia') {
+        return new Date(`${rawValue}T00:00:00`).toLocaleDateString('pt-BR')
+      }
+
+      if (question.field === 'natureza_id') {
+        return naturezas.find((item) => String(item.id) === rawValue)?.natureza || rawValue
+      }
+
+      if (question.field === 'tipo_id') {
+        return availableTipos.find((item) => String(item.id) === rawValue)?.tipo || rawValue
+      }
+
+      if (question.field === 'riscoassociado_id') {
+        return (
+          riscosAssociados.find((item) => String(item.id) === rawValue)?.risco_associado ||
+          rawValue
+        )
+      }
+
+      if (question.field === 'potencial_local') {
+        return (
+          potenciais.find((item) => item.potencial_local === rawValue)?.potencial_local || rawValue
+        )
+      }
+
+      if (question.options?.length) {
+        return question.options.find((option) => option.value === rawValue)?.label || rawValue
+      }
+
+      return rawValue
+    },
+    [availableTipos, naturezas, potenciais, riscosAssociados]
+  )
+
+  const getNextQuestionIndex = useCallback(
+    (questionIndex: number, value: string | number | boolean) => {
+      const question = questions[questionIndex]
+      if (!question) return questionIndex + 1
+
+      if (question.id === 'data_confirmacao') {
+        return value === 'sim' ? questionIndex + 2 : questionIndex + 1
+      }
+
+      if (question.id === 'ver_agir') {
+        return value === 'true' || value === true ? questionIndex + 1 : questionIndex + 2
+      }
+
+      return questionIndex + 1
+    },
+    [questions]
+  )
+
+  const handleUserResponse = useCallback(
+    async (value: string | number | boolean) => {
+      if (!currentQuestion || isTyping || loading) return
+
+      if (
+        currentQuestion.required &&
+        ((typeof value === 'string' && !value.trim()) || value === null || value === undefined)
+      ) {
+        toast.error('Esta informação é obrigatória')
+        return
+      }
+
+      if (currentQuestion.validation && !currentQuestion.validation(value)) {
+        if (currentQuestion.id === 'data_ocorrencia') {
+          toast.error('Informe uma data válida que não seja futura')
+        } else {
+          toast.error('Por favor, forneça uma resposta válida')
+        }
+        return
+      }
+
+      addUserMessage(getDisplayValue(currentQuestion, value))
+      setShowInput(false)
+      setUserInput('')
+
+      setFormData((prev) => {
+        const nextData = { ...prev }
+
+        switch (currentQuestion.id) {
+          case 'data_confirmacao':
+            nextData.data_ocorrencia = value === 'sim' ? getTodayIsoDate() : ''
+            break
+          case 'data_ocorrencia':
+            nextData.data_ocorrencia = String(value)
+            break
+          case 'ver_agir':
+            nextData.ver_agir = value === 'true' || value === true
+            if (!nextData.ver_agir) {
+              nextData.acao = ''
             }
+            break
+          case 'gerou_recusa':
+            nextData.gerou_recusa = value === 'true' || value === true
+            break
+          case 'potencial': {
+            const potencialSelecionado = potenciais.find(
+              (item) => item.potencial_local === String(value)
+            )
+            if (potencialSelecionado) {
+              nextData.potencial_local = potencialSelecionado.potencial_local
+              nextData.potencial = potencialSelecionado.potencial_sede
+            }
+            break
           }
-        } catch (error) {
-          console.error('ðŸ›¡ï¸ Erro ao verificar backup:', error)
+          case 'natureza':
+            nextData.natureza_id = String(value)
+            nextData.tipo_id = ''
+            break
+          default:
+            if (currentQuestion.field !== 'images' && currentQuestion.field !== '') {
+              nextData[currentQuestion.field as keyof FormData] = String(value) as never
+            }
+            break
         }
-      }
-    }
-    
-    // ðŸ›¡ï¸ VERIFICAÃ‡ÃƒO AUTOMÃTICA DE INTEGRIDADE A CADA MUDANÃ‡A
-    if (isOpen && !loading) {
-      setTimeout(() => checkImageIntegrity(), 100)
-    }
-  }, [images, isOpen, currentQuestionIndex, loading, isTyping, checkImageIntegrity, saveImagesToBackup])
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }
+        return nextData
+      })
 
-
-
-
-
-
-
-
-
-
-
-  const addUserMessage = (content: string) => {
-    const messageId = `msg-${messageIdCounter}-${Date.now()}`
-    setMessageIdCounter(prev => prev + 1)
-    const newMessage: Message = {
-      id: messageId,
-      type: 'user',
-      content,
-      timestamp: new Date()
-    }
-    setMessages(prev => [...prev, newMessage])
-  }
-
-  const handleUserResponse = async (value: string | number | boolean) => {
-    const currentQuestion = questions[currentQuestionIndex]
-    
-    // ðŸ” LOG DO ESTADO DAS IMAGENS EM CADA RESPOSTA
-    console.log('ðŸ” ===== HANDLEUSERRESPONSE =====', {
-      perguntaAtual: currentQuestion.id,
-      perguntaTexto: currentQuestion.text,
-      valorResposta: value,
-      estadoImagens: {
-        quantidade: images.length,
-        detalhes: images.map((img, idx) => ({
-          index: idx,
-          fileName: img.file.name,
-          categoria: img.categoria,
-          temPreview: !!img.preview
-        }))
-      }
-    })
-    
-    // Validar resposta se necessÃ¡rio
-    if (currentQuestion.required && (typeof value === 'string' ? !value.trim() : !value)) {
-      toast.error('Esta informação é obrigatória')
-      return
-    }
-
-    if (currentQuestion.validation && typeof value === 'string' && !currentQuestion.validation(value)) {
-      toast.error('Por favor, forneça uma resposta mais detalhada')
-      return
-    }
-
-    // Adicionar resposta do usuÃ¡rio (mostrar label quando for select de natureza/tipo)
-    const valueAsString = String(value)
-    let displayValue = valueAsString
-    if (currentQuestion.field === 'natureza_id') {
-      const naturezaSelecionada = naturezas.find(n => String(n.id) === valueAsString)
-      if (naturezaSelecionada) displayValue = naturezaSelecionada.natureza
-    } else if (currentQuestion.field === 'tipo_id') {
-      const tipoSelecionado = tipos.find(t => String(t.id) === valueAsString)
-      if (tipoSelecionado) displayValue = tipoSelecionado.tipo
-    } else if (currentQuestion.field === 'riscoassociado_id') {
-      const riscoSelecionado = riscosAssociados.find(r => String(r.id) === valueAsString)
-      if (riscoSelecionado) displayValue = riscoSelecionado.risco_associado
-    } else if (currentQuestion.options && currentQuestion.options.length > 0) {
-      const optionSelecionada = currentQuestion.options.find(opt => opt.value === valueAsString)
-      if (optionSelecionada) displayValue = optionSelecionada.label
-    }
-
-    addUserMessage(displayValue)
-    setUserInput('')
-    setShowInput(false)
-
-    // Atualizar dados do formulÃ¡rio
-    if (currentQuestion.field !== 'images' && currentQuestion.field !== '') {
-      let processedValue: unknown = value
-      
-      if (currentQuestion.field === 'ver_agir' || currentQuestion.field === 'gerou_recusa') {
-        processedValue = value === 'true'
-      }
-      
-      if (currentQuestion.id === 'data_confirmacao') {
-        if (value === 'sim') {
-          // Se confirmou que foi hoje, usar a data atual
-          processedValue = new Date().toISOString().split('T')[0]
-        } else {
-          // Se nÃ£o foi hoje, por simplicidade vamos usar a data atual (pode ser melhorado com date picker)
-          processedValue = new Date().toISOString().split('T')[0]
-        }
-      }
-      
-      // LÃ³gica especial para potencial_local
-      if (currentQuestion.field === 'potencial_local') {
-        const potencialSelecionado = potenciais.find(p => p.potencial_local === value)
-        if (potencialSelecionado) {
-          setFormData(prev => ({
-            ...prev,
-            potencial_local: potencialSelecionado.potencial_local,
-            potencial: potencialSelecionado.potencial_sede
-          }))
-        }
-      } else {
-        setFormData(prev => ({
-          ...prev,
-          [currentQuestion.field]: processedValue
-        }))
-      }
-    }
-
-    if (currentQuestion.id === 'ver_agir') {
-      const isVerAgir = value === 'true' || value === true
+      const nextIndex = getNextQuestionIndex(currentQuestionIndex, value)
       setTimeout(() => {
-        if (currentQuestionIndex < questions.length - 1) {
-          if (isVerAgir) {
-            nextQuestion()
-            return
-          }
-          const nextIndex = currentQuestionIndex + 2
-          setCurrentQuestionIndex(nextIndex)
-          if (nextIndex < questions.length) {
-            const nextQuestion = questions[nextIndex]
-            setTimeout(() => {
-              typeMessage(nextQuestion.text, 'bot', () => {
-                setShowInput(true)
-                setTimeout(() => {
-                  scrollToBottom()
-                }, 100)
-              })
-            }, 500)
-          } else {
-            finishConversation()
-          }
+        if (nextIndex < questions.length) {
+          askQuestion(nextIndex)
         } else {
-          finishConversation()
+          void finishConversationRef.current()
         }
       }, PAUSE_BETWEEN_MESSAGES)
-      return
-    }
-    if (currentQuestion.id === 'gerou_recusa') {
-      setTimeout(async () => {
+    },
+    [
+      addUserMessage,
+      askQuestion,
+      currentQuestion,
+      currentQuestionIndex,
+      getDisplayValue,
+      getNextQuestionIndex,
+      isTyping,
+      loading,
+      potenciais,
+      questions.length
+    ]
+  )
+
+  const uploadImagesForDesvio = useCallback(
+    async (desvioId: string) => {
+      const uploadedImages: string[] = []
+      const failedImages: string[] = []
+
+      for (const image of images) {
         try {
-          // Cadastrar o desvio imediatamente apÃ³s responder 'gerou_recusa'
-          await cadastrarDesvioAntecipado()
-          
-          // Continuar para a prÃ³xima pergunta (imagens)
-          if (currentQuestionIndex < questions.length - 1) {
-            nextQuestion()
-          } else {
-            finishConversation()
+          const uploadFormData = new FormData()
+          uploadFormData.append('file', image.file)
+
+          const uploadResponse = await fetch('/api/desvios/upload-image', {
+            method: 'POST',
+            body: uploadFormData
+          })
+
+          if (!uploadResponse.ok) {
+            throw new Error(image.file.name)
           }
-        } catch {
-          toast.error('Erro ao processar desvio. Tente novamente.')
-          setLoading(false)
-        }
-      }, PAUSE_BETWEEN_MESSAGES)
-    } else {
-      // PrÃ³xima pergunta ou finalizar (fluxo normal para outras perguntas)
-      setTimeout(() => {
-        if (currentQuestionIndex < questions.length - 1) {
-          nextQuestion()
-        } else {
-          finishConversation()
-        }
-      }, PAUSE_BETWEEN_MESSAGES)
-    }
-  }
 
-  const nextQuestion = () => {
-    const nextIndex = currentQuestionIndex + 1
-    setCurrentQuestionIndex(nextIndex)
-    
-    // ðŸ”„ LOG DO ESTADO DAS IMAGENS AO AVANÃ‡AR PERGUNTA
-    console.log('ðŸ”„ ===== NEXTQUESTION =====', {
-      perguntaAnterior: currentQuestionIndex,
-      proximaPergunta: nextIndex,
-      estadoImagens: {
-        quantidade: images.length,
-        detalhes: images.map((img, idx) => ({
-          index: idx,
-          fileName: img.file.name,
-          categoria: img.categoria,
-          temPreview: !!img.preview
-        }))
+          const uploadResult = await uploadResponse.json()
+          if (!uploadResult.success) {
+            throw new Error(image.file.name)
+          }
+
+          const imageRegisterResponse = await fetch('/api/desvios/imagens', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              desvio_id: desvioId,
+              url: uploadResult.data.publicUrl,
+              categoria: image.categoria,
+              nome_arquivo: uploadResult.data.fileName || image.file.name,
+              tamanho: image.file.size,
+              tipo_mime: image.file.type
+            })
+          })
+
+          if (!imageRegisterResponse.ok) {
+            throw new Error(image.file.name)
+          }
+
+          uploadedImages.push(image.file.name)
+        } catch (error) {
+          console.error('Erro ao processar imagem:', image.file.name, error)
+          failedImages.push(image.file.name)
+        }
       }
-    })
-    
-    if (nextIndex < questions.length) {
-      const nextQuestion = questions[nextIndex]
-      
-      setTimeout(() => {
-        typeMessage(nextQuestion.text, 'bot', () => {
-          setShowInput(true)
-          setTimeout(() => {
-            scrollToBottom()
-          }, 100)
-        })
-      }, 500)
-    }
-  }
 
+      return { uploadedImages, failedImages }
+    },
+    [images]
+  )
 
-
-  const finishConversation = async () => {
-    // ðŸ LOG SIMPLIFICADO DO ESTADO AO FINALIZAR CONVERSA
-    console.log('ðŸ ===== FINISHCONVERSATION CHAMADA (NOVA ABORDAGEM) =====', {
-      timestamp: new Date().toISOString(),
-      desvioId: desvioId,
-      desvioJaCadastrado: !!desvioId,
-      quantidadeImagens: images.length,
-      imagensJaCadastradas: images.filter(img => (img as ImageFile & { cadastrada?: boolean }).cadastrada).length
-    })
-    
-    // O desvio jÃ¡ deve ter sido cadastrado apÃ³s a pergunta 'gerou_recusa'
-    if (!desvioId) {
-      toast.error('Erro interno: Desvio não foi cadastrado corretamente.')
-      setLoading(false)
-      return
-    }
-    
-    typeMessage('Perfeito! Todas as informações foram processadas com sucesso. Finalizando o relato...', 'bot', () => {
-      setTimeout(() => handleSubmit(), 1000)
-    })
-  }
-
-  const handleSubmit = async () => {
+  const handleSubmit = useCallback(async () => {
     try {
       setLoading(true)
-      
-      // ðŸš€ LOG DO HANDLESUBMIT SIMPLIFICADO
-      console.log('ðŸš€ ===== HANDLESUBMIT EXECUTADO (NOVA ABORDAGEM) =====', {
-        timestamp: new Date().toISOString(),
-        desvioId: desvioId,
-        desvioJaCadastrado: !!desvioId,
-        quantidadeImagens: images.length,
-        imagensJaCadastradas: images.filter(img => (img as ImageFile & { cadastrada?: boolean }).cadastrada).length
-      })
-      
-      // âœ… VERIFICAR SE O DESVIO JÃ FOI CADASTRADO
-      if (!desvioId) {
-        throw new Error('Erro interno: Desvio não foi cadastrado')
+
+      const payload = {
+        titulo: buildAutoTitle(formData.descricao),
+        descricao: formData.descricao.trim(),
+        local: formData.local,
+        data_ocorrencia: formData.data_ocorrencia || getTodayIsoDate(),
+        natureza_id: formData.natureza_id,
+        tipo_id: formData.tipo_id,
+        potencial: formData.potencial,
+        potencial_local: formData.potencial_local,
+        contrato: user?.contrato_raiz || formData.contrato,
+        riscoassociado_id: formData.riscoassociado_id,
+        ver_agir: formData.ver_agir,
+        gerou_recusa: formData.gerou_recusa,
+        acao: formData.ver_agir ? formData.acao.trim() : null
       }
 
+      const response = await fetch('/api/desvios', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      })
 
-      typeMessage('Relato criado com sucesso! Obrigado por contribuir com a segurança.', 'bot', () => {
+      const result = await response.json()
+      if (!response.ok || !result.success || !result.data?.id) {
+        throw new Error(result.message || 'Erro ao criar desvio')
+      }
+
+      let finalMessage = 'Relato criado com sucesso! Obrigado por contribuir com a segurança.'
+
+      if (images.length > 0) {
+        const { uploadedImages, failedImages } = await uploadImagesForDesvio(result.data.id)
+
+        if (failedImages.length > 0) {
+          finalMessage =
+            uploadedImages.length > 0
+              ? `Relato criado com sucesso. ${uploadedImages.length} imagem(ns) enviada(s) e ${failedImages.length} falharam.`
+              : 'Relato criado com sucesso, mas não foi possível enviar as imagens.'
+          toast.warning(finalMessage)
+        } else {
+          finalMessage = `Relato criado com sucesso com ${uploadedImages.length} imagem(ns) anexada(s).`
+          toast.success(finalMessage)
+        }
+      } else {
+        toast.success('Relato criado com sucesso!')
+      }
+
+      await typeMessage(finalMessage, 'bot', () => {
         setTimeout(() => {
-          toast.success('Desvio criado com sucesso!')
-          // Reset do formulÃ¡rio apenas apÃ³s cadastro completo (desvio + imagens)
           resetForm()
           onSuccess?.()
           onClose()
-        }, 2000)
+        }, 1200)
       })
-      
     } catch (error) {
       console.error('Error creating desvio:', error)
-      typeMessage('Ops! Ocorreu um erro ao criar o relato. Tente novamente.', 'bot')
-      toast.error('Erro ao criar desvio')
+      const errorMessage =
+        error instanceof Error && error.message
+          ? error.message
+          : 'Ops! Ocorreu um erro ao criar o relato. Tente novamente.'
+      await typeMessage(errorMessage, 'bot')
+      toast.error(errorMessage)
     } finally {
       setLoading(false)
     }
-  }
+  }, [
+    formData,
+    images.length,
+    onClose,
+    onSuccess,
+    resetForm,
+    typeMessage,
+    uploadImagesForDesvio,
+    user?.contrato_raiz
+  ])
 
+  const finishConversation = useCallback(async () => {
+    await typeMessage('Perfeito! Vou finalizar o registro do relato agora.', 'bot', () => {
+      setTimeout(() => {
+        void handleSubmit()
+      }, 500)
+    })
+  }, [handleSubmit, typeMessage])
 
+  useEffect(() => {
+    finishConversationRef.current = finishConversation
+  }, [finishConversation])
 
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const removeImage = useCallback((indexToRemove: number) => {
+    setImages((prev) => {
+      const nextImages = [...prev]
+      const removed = nextImages[indexToRemove]
+      if (removed?.preview.startsWith('blob:')) {
+        URL.revokeObjectURL(removed.preview)
+      }
+      nextImages.splice(indexToRemove, 1)
+      return nextImages
+    })
+  }, [])
+
+  const handleImageUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || [])
     if (files.length === 0) return
-    // Processar cada imagem - APENAS UPLOAD E ARMAZENAMENTO NO ESTADO LOCAL
-    for (const file of files) {
-      try {
-        // 1. Upload do arquivo para obter a URL
-        const uploadFormData = new FormData()
-        uploadFormData.append('file', file)
-        
-        const uploadResponse = await fetch('/api/desvios/upload-image', {
-          method: 'POST',
-          body: uploadFormData
-        })
-        
-        if (!uploadResponse.ok) {
-          const errorData = await uploadResponse.json()
-          toast.error(errorData.error || `Erro no upload de ${file.name}`)
+
+    setImages((prev) => {
+      const nextImages = [...prev]
+
+      for (const file of files) {
+        if (!file.type.startsWith('image/')) {
+          toast.error(`Arquivo ${file.name} não é uma imagem válida`)
           continue
         }
-        
-        const uploadResult = await uploadResponse.json()
-        
-        if (uploadResult.success) {
-          const imageUrl = uploadResult.data.publicUrl
-          
-          // ðŸ†” VERIFICAR SE TEMOS O ID DO DESVIO
-          if (!desvioId) {
-            console.error('ERRO: desvioId não encontrado! Não é possÃ­vel cadastrar a imagem.')
-            toast.error('Erro: Desvio não foi cadastrado ainda. Tente novamente.')
-            continue
-          }
-          
-          // 2. CADASTRAR IMAGEM NA TABELA imagens_desvios IMEDIATAMENTE
-          try {
-            const imagemData = {
-              desvio_id: desvioId,
-              url: imageUrl,
-              categoria: 'evidencia'
-            }
-            
-            console.log('ðŸ“¸ ðŸ†” CADASTRANDO IMAGEM NA TABELA:', imagemData)
-            
-            const cadastroResponse = await fetch('/api/desvios/imagens', {
-              method: 'POST',
-              body: JSON.stringify(imagemData)
-            })
-            
-            if (!cadastroResponse.ok) {
-              const errorData = await cadastroResponse.json()
-              throw new Error(`Erro ao cadastrar imagem: ${errorData.message || cadastroResponse.statusText}`)
-            }
-            
-            const cadastroResult = await cadastroResponse.json()
-            console.log('IMAGEM CADASTRADA COM SUCESSO:', cadastroResult)
-            
-            // 3. Armazenar no estado local apenas para preview
-           
-            
-            setImagesWithLog(prev => {
-              const novoEstado = [...prev, { 
-                file, 
-                preview: imageUrl, // URL da imagem para preview
-                categoria: 'evidencia' as const,
-                url: imageUrl, // URL armazenada
-                cadastrada: true // Marca que jÃ¡ foi cadastrada
-              }]
-              
-              console.log('IMAGEM PROCESSADA COMPLETAMENTE:', {
-                fileName: file.name,
-                estadoAnterior: prev.length,
-                novoEstado: novoEstado.length,
-                cadastradaNaTabela: true,
-                desvioId: desvioId
-              })
-              
-              return novoEstado
-            })
-            
-            toast.success(`${file.name} enviada e cadastrada com sucesso!`)
-          } catch (error) {
-            console.error('Erro ao cadastrar imagem na tabela:', error)
-            toast.error(`Erro ao cadastrar ${file.name}. Tente novamente.`)
-            continue
-          }
-        } else {
-          toast.error(`Erro no upload de ${file.name}`)
-        }
-      } catch (error) {
-        console.error('Erro no processamento do arquivo:', file.name, error)
-        toast.error(`Erro no processamento de ${file.name}`)
-      }
-    }
 
-    // Continuar com o fluxo conversacional
-    if (files.length > 0) {
-      handleUserResponse(`${files.length} imagem(ns) anexada(s)`)
-    } else {
-      handleUserResponse('Nenhuma imagem anexada')
+        if (file.size > MAX_IMAGE_SIZE) {
+          toast.error(`Arquivo ${file.name} é muito grande (máx. 5MB)`)
+          continue
+        }
+
+        if (nextImages.length >= MAX_IMAGES) {
+          toast.error(`Máximo de ${MAX_IMAGES} imagens por relato`)
+          break
+        }
+
+        nextImages.push({
+          file,
+          preview: URL.createObjectURL(file),
+          categoria: 'evidencia'
+        })
+      }
+
+      return nextImages
+    })
+
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
     }
-  }
+  }, [])
 
   const renderInput = () => {
-    const currentQuestion = questions[currentQuestionIndex]
-    
-    if (!showInput) return null
+    if (!showInput || !currentQuestion) return null
 
     switch (currentQuestion.type) {
       case 'textarea':
@@ -1035,21 +882,47 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
           <div className="flex items-end space-x-2">
             <textarea
               value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
+              onChange={(event) => setUserInput(event.target.value)}
               placeholder="Digite sua resposta..."
-              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-700 dark:text-white resize-none"
+              className="flex-1 resize-none rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
               rows={3}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleUserResponse(userInput)
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault()
+                  void handleUserResponse(userInput)
                 }
               }}
             />
             <button
-              onClick={() => handleUserResponse(userInput)}
+              onClick={() => void handleUserResponse(userInput)}
               disabled={!userInput.trim()}
-              className="px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-lg bg-orange-600 px-4 py-3 text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              <Send className="h-5 w-5" />
+            </button>
+          </div>
+        )
+
+      case 'date':
+        return (
+          <div className="flex items-end space-x-2">
+            <input
+              type="date"
+              value={userInput}
+              max={getTodayIsoDate()}
+              onChange={(event) => setUserInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && userInput) {
+                  event.preventDefault()
+                  void handleUserResponse(userInput)
+                }
+              }}
+              className="flex-1 rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            />
+            <button
+              onClick={() => void handleUserResponse(userInput)}
+              disabled={!userInput}
+              className="rounded-lg bg-orange-600 px-4 py-3 text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send className="h-5 w-5" />
             </button>
@@ -1057,85 +930,77 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
         )
 
       case 'select': {
-        const options = currentQuestion.field === 'natureza_id' ? 
-          naturezas.map(n => ({ value: n.id, label: n.natureza })) :
-          currentQuestion.field === 'tipo_id' ?
-          tipos.map(t => ({ value: t.id, label: t.tipo })) :
-          currentQuestion.field === 'local' ?
-          locais.map(l => ({ value: l.local, label: l.local })) :
-          currentQuestion.field === 'potencial_local' ?
-          potenciais.map(p => ({ value: p.potencial_local, label: p.potencial_local })) :
-          currentQuestion.field === 'riscoassociado_id' ?
-          riscosAssociados.map(r => ({ value: r.id, label: r.risco_associado })) :
-          currentQuestion.options || []
+        const options =
+          currentQuestion.field === 'natureza_id'
+            ? naturezas.map((natureza) => ({ value: natureza.id, label: natureza.natureza }))
+            : currentQuestion.field === 'tipo_id'
+              ? availableTipos.map((tipo) => ({ value: tipo.id, label: tipo.tipo }))
+              : currentQuestion.field === 'local'
+                ? locais.map((local) => ({ value: local.local, label: local.local }))
+                : currentQuestion.field === 'potencial_local'
+                  ? potenciais.map((potencial) => ({
+                      value: potencial.potencial_local,
+                      label: potencial.potencial_local
+                    }))
+                  : currentQuestion.field === 'riscoassociado_id'
+                    ? riscosAssociados.map((risco) => ({
+                        value: risco.id,
+                        label: risco.risco_associado
+                      }))
+                    : []
 
-        console.log('ðŸ” OpÃ§Ãµes disponÃ­veis para', currentQuestion.field, ':', options)
+        const sortedOptions =
+          currentQuestion.field === 'local'
+            ? [...options].sort((a, b) =>
+                a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' })
+              )
+            : options
 
-        if (options.length === 0) {
+        if (sortedOptions.length === 0) {
           return (
-            <div className="text-center py-4">
-              <p className="text-gray-500 dark:text-gray-400">Carregando opÃ§Ãµes...</p>
+            <div className="py-4 text-center">
+              <p className="text-gray-500 dark:text-gray-400">
+                {currentQuestion.field === 'tipo_id' && formData.natureza_id
+                  ? 'Nenhum tipo disponível para a natureza selecionada.'
+                  : 'Carregando opções...'}
+              </p>
             </div>
           )
         }
 
-        const sortedOptions = currentQuestion.field === 'local'
-          ? [...options].sort((a, b) => a.label.localeCompare(b.label, 'pt-BR', { sensitivity: 'base' }))
-          : options
-
-        if (currentQuestion.field === 'local') {
+        if (currentQuestion.field === 'local' || currentQuestion.field === 'riscoassociado_id') {
           return (
-            <div className="space-y-2">
-              <select
-                defaultValue=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    handleUserResponse(e.target.value)
-                  }
-                }}
-                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                <option value="" disabled>Selecione o local...</option>
-                {sortedOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )
-        }
-        
-        if (currentQuestion.field === 'riscoassociado_id') {
-          return (
-            <div className="space-y-2">
-              <select
-                defaultValue=""
-                onChange={(e) => {
-                  if (e.target.value) {
-                    handleUserResponse(e.target.value)
-                  }
-                }}
-                className="w-full px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-              >
-                <option value="" disabled>Selecione o risco associado...</option>
-                {sortedOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <select
+              key={currentQuestion.id}
+              defaultValue=""
+              onChange={(event) => {
+                if (event.target.value) {
+                  void handleUserResponse(event.target.value)
+                }
+              }}
+              className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-gray-900 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+            >
+              <option value="" disabled>
+                {currentQuestion.field === 'local'
+                  ? 'Selecione o local...'
+                  : 'Selecione o risco associado...'}
+              </option>
+              {sortedOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           )
         }
 
         return (
           <div className="space-y-2">
-            {sortedOptions.map((option, index) => (
+            {sortedOptions.map((option) => (
               <button
-                key={`${option.value}-${index}`}
-                onClick={() => handleUserResponse(option.value)}
-                className="w-full text-left px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-gray-900 dark:text-white font-medium"
+                key={option.value}
+                onClick={() => void handleUserResponse(option.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-left font-medium text-gray-900 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
               >
                 {option.label}
               </button>
@@ -1147,11 +1012,11 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
       case 'radio':
         return (
           <div className="space-y-2">
-            {currentQuestion.options?.map((option, index) => (
+            {currentQuestion.options?.map((option) => (
               <button
-                key={`${option.value}-${index}`}
-                onClick={() => handleUserResponse(option.value)}
-                className="w-full text-left px-4 py-3 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors text-gray-900 dark:text-white font-medium"
+                key={option.value}
+                onClick={() => void handleUserResponse(option.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-3 text-left font-medium text-gray-900 transition-colors hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-white dark:hover:bg-gray-600"
               >
                 {option.label}
               </button>
@@ -1164,38 +1029,50 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
           <div className="space-y-4">
             <button
               onClick={() => fileInputRef.current?.click()}
-              className="w-full flex items-center justify-center px-4 py-6 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg hover:border-orange-500 transition-colors"
+              className="flex w-full items-center justify-center rounded-lg border-2 border-dashed border-gray-300 px-4 py-6 transition-colors hover:border-orange-500 dark:border-gray-600"
             >
               <div className="text-center">
-                <Camera className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                <Camera className="mx-auto mb-2 h-8 w-8 text-gray-400" />
                 <span className="text-sm text-gray-500 dark:text-gray-400">
                   Clique para adicionar imagens
                 </span>
               </div>
             </button>
-            
+
             {images.length > 0 && (
               <div className="grid grid-cols-3 gap-2">
                 {images.map((image, index) => (
-                  <img
-                    key={index}
-                    src={image.preview}
-                    alt={`Imagem ${index + 1}`}
-                    className="w-full h-20 object-cover rounded-lg"
-                  />
+                  <div key={`${image.file.name}-${index}`} className="group relative">
+                    <img
+                      src={image.preview}
+                      alt={`Imagem ${index + 1}`}
+                      className="h-20 w-full rounded-lg object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(index)}
+                      className="absolute -right-2 -top-2 h-6 w-6 rounded-full bg-red-600 text-xs text-white opacity-0 transition-opacity group-hover:opacity-100"
+                    >
+                      ×
+                    </button>
+                  </div>
                 ))}
               </div>
             )}
-            
-            <div className="flex space-x-2">
-              <button
-                onClick={() => handleUserResponse(images.length > 0 ? `${images.length} imagem(ns) anexada(s)` : 'Nenhuma imagem')}
-                className="flex-1 px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
-              >
-                {images.length > 0 ? 'Continuar com imagens' : 'Pular imagens'}
-              </button>
-            </div>
-            
+
+            <button
+              onClick={() =>
+                void handleUserResponse(
+                  images.length > 0
+                    ? `${images.length} imagem(ns) selecionada(s)`
+                    : 'Nenhuma imagem'
+                )
+              }
+              className="w-full rounded-lg bg-orange-600 px-4 py-2 text-white hover:bg-orange-700"
+            >
+              {images.length > 0 ? 'Continuar com imagens' : 'Pular imagens'}
+            </button>
+
             <input
               ref={fileInputRef}
               type="file"
@@ -1207,18 +1084,17 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
           </div>
         )
 
-      case 'button': {
+      case 'button':
         return (
           <div className="flex justify-center">
             <button
-              onClick={() => handleUserResponse('continue')}
-              className="px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors font-medium"
+              onClick={() => void handleUserResponse('continue')}
+              className="rounded-lg bg-orange-600 px-6 py-3 font-medium text-white transition-colors hover:bg-orange-700"
             >
               {currentQuestion.buttonText || 'Continuar'}
             </button>
           </div>
         )
-      }
 
       default:
         return (
@@ -1226,20 +1102,20 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
             <input
               type="text"
               value={userInput}
-              onChange={(e) => setUserInput(e.target.value)}
+              onChange={(event) => setUserInput(event.target.value)}
               placeholder="Digite sua resposta..."
-              className="flex-1 px-4 py-3 border border-gray-300 dark:border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500 dark:bg-gray-700 dark:text-white"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault()
-                  handleUserResponse(userInput)
+              className="flex-1 rounded-lg border border-gray-300 px-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  void handleUserResponse(userInput)
                 }
               }}
             />
             <button
-              onClick={() => handleUserResponse(userInput)}
+              onClick={() => void handleUserResponse(userInput)}
               disabled={!userInput.trim()}
-              className="px-4 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-lg bg-orange-600 px-4 py-3 text-white hover:bg-orange-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
               <Send className="h-5 w-5" />
             </button>
@@ -1248,20 +1124,23 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
     }
   }
 
+  const handleModalClose = () => {
+    if (loading) return
+    resetForm()
+    onClose()
+  }
+
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 overflow-hidden">
-      {/* Backdrop */}
-      <div className="absolute inset-0 bg-black bg-opacity-50" onClick={onClose} />
-      
-      {/* Modal */}
-      <div className="relative w-full h-full flex items-center justify-center p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl h-full max-h-[90vh] flex flex-col">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-600">
+      <div className="absolute inset-0 bg-black/50" onClick={handleModalClose} />
+
+      <div className="relative flex h-full w-full items-center justify-center p-4">
+        <div className="flex h-full max-h-[90vh] w-full max-w-2xl flex-col rounded-lg bg-white shadow-xl dark:bg-gray-800">
+          <div className="flex items-center justify-between border-b border-gray-200 p-6 dark:border-gray-600">
             <div className="flex items-center">
-              <Bot className="h-6 w-6 text-orange-600 mr-3" />
+              <Bot className="mr-3 h-6 w-6 text-orange-600" />
               <div>
                 <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
                   Assistente de Relatos
@@ -1272,82 +1151,68 @@ export default function FormularioConversacional({ isOpen, onClose, onSuccess }:
               </div>
             </div>
             <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+              onClick={handleModalClose}
+              disabled={loading}
+              className="text-gray-400 hover:text-gray-600 disabled:opacity-50 dark:hover:text-gray-300"
             >
               <X className="h-6 w-6" />
             </button>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 space-y-4 overflow-y-auto p-6">
             {messages.map((message) => (
               <div
                 key={message.id}
                 className={`flex ${message.type === 'user' ? 'justify-end' : 'justify-start'}`}
               >
-                <div className={`flex items-start space-x-2 max-w-[80%] ${
-                  message.type === 'user' ? 'flex-row-reverse space-x-reverse' : ''
-                }`}>
-                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                    message.type === 'user' 
-                      ? 'bg-orange-600 text-white' 
-                      : 'bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300'
-                  }`}>
-                    {message.type === 'user' ? (
-                      <User className="h-4 w-4" />
-                    ) : (
-                      <Bot className="h-4 w-4" />
-                    )}
-                  </div>
-                  
-                  <div className={`px-4 py-3 rounded-lg ${
+                <div
+                  className={`max-w-[85%] rounded-2xl px-4 py-3 shadow-sm ${
                     message.type === 'user'
-                      ? 'bg-orange-600 text-white'
-                      : 'bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white'
-                  }`}>
-                    <p className="text-sm">{message.content}</p>
-                    {message.isTyping && (
-                      <div className="flex items-center mt-2">
-                        <div className="flex space-x-1">
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                          <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
-                        </div>
-                      </div>
-                    )}
+                      ? 'rounded-br-md bg-orange-600 text-white'
+                      : 'rounded-bl-md bg-gray-100 text-gray-900 dark:bg-gray-700 dark:text-white'
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
+                    <div
+                      className={`mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
+                        message.type === 'user'
+                          ? 'bg-orange-500/30 text-white'
+                          : 'bg-white text-orange-600 dark:bg-gray-800'
+                      }`}
+                    >
+                      {message.type === 'user' ? (
+                        <User className="h-4 w-4" />
+                      ) : (
+                        <Bot className="h-4 w-4" />
+                      )}
+                    </div>
+                    <p className="whitespace-pre-wrap break-words text-sm leading-6">
+                      {message.content || (message.isTyping ? '...' : '')}
+                    </p>
                   </div>
                 </div>
               </div>
             ))}
-            
-            {loading && (
+
+            {(loading || isTyping) && !showInput && (
               <div className="flex justify-start">
-                <div className="flex items-start space-x-2 max-w-[80%]">
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300">
+                <div className="rounded-2xl rounded-bl-md bg-gray-100 px-4 py-3 text-gray-700 dark:bg-gray-700 dark:text-gray-100">
+                  <div className="flex items-center gap-2 text-sm">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                  </div>
-                  <div className="px-4 py-3 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-900 dark:text-white">
-                    <p className="text-sm">Processando...</p>
+                    <span>{loading ? 'Finalizando registro...' : 'Digitando...'}</span>
                   </div>
                 </div>
               </div>
             )}
-            
+
             <div ref={messagesEndRef} />
           </div>
 
-          {/* Input Area */}
-          {showInput && !loading && (
-            <div className="p-6 border-t border-gray-200 dark:border-gray-600">
-              {renderInput()}
-            </div>
-          )}
+          <div className="border-t border-gray-200 p-6 dark:border-gray-600">
+            {renderInput()}
+          </div>
         </div>
       </div>
     </div>
   )
 }
-
-
-

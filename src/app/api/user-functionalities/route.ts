@@ -1,18 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { verifyToken } from '@/lib/auth'
+import { getUserPermissions, userHasFunctionality } from '@/lib/permissions-server'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Verifica autenticacao usando cookie HttpOnly.
-async function verifyAuth(
-  request: NextRequest,
-  options: { requirePrivileged?: boolean } = {}
-) {
-  const { requirePrivileged = false } = options
+const MANAGE_USER_FUNCTIONALITIES_SLUG = 'editar_funcionalidades_usuarios'
+
+async function verifyAuth(request: NextRequest) {
   const token = request.cookies.get('auth_token')?.value
   if (!token) {
     return { user: null, error: 'Token nao fornecido', status: 401 }
@@ -23,15 +21,50 @@ async function verifyAuth(
     return { user: null, error: 'Token invalido ou expirado', status: 401 }
   }
 
-  if (requirePrivileged && !['Admin', 'Editor'].includes(decoded.role)) {
+  return { user: decoded, error: undefined, status: undefined }
+}
+
+async function getManageableFunctionalityIds(user: NonNullable<Awaited<ReturnType<typeof verifyAuth>>['user']>) {
+  const permissions = await getUserPermissions(user)
+
+  return Array.from(
+    new Set(
+      (permissions?.modulos || []).flatMap((modulo) =>
+        modulo.funcionalidades.map((funcionalidade) => funcionalidade.id)
+      )
+    )
+  )
+}
+
+async function canManageUserFunctionalities(
+  user: NonNullable<Awaited<ReturnType<typeof verifyAuth>>['user']>
+) {
+  return userHasFunctionality(user, MANAGE_USER_FUNCTIONALITIES_SLUG)
+}
+
+async function validateManagedFunctionalityAccess(
+  user: NonNullable<Awaited<ReturnType<typeof verifyAuth>>['user']>,
+  functionalityId: string
+) {
+  const canManage = await canManageUserFunctionalities(user)
+  if (!canManage) {
     return {
-      user: decoded,
-      error: 'Acesso negado. Apenas administradores e editores podem gerenciar funcionalidades de usuarios.',
+      error:
+        'Acesso negado. A funcionalidade editar_funcionalidades_usuarios e obrigatoria.',
       status: 403
     }
   }
 
-  return { user: decoded, error: undefined, status: undefined }
+  const manageableFunctionalityIds = await getManageableFunctionalityIds(user)
+  if (!manageableFunctionalityIds.includes(functionalityId)) {
+    return {
+      error:
+        'Acesso negado. Voce so pode gerenciar funcionalidades que tambem possui acesso.',
+      status: 403
+    }
+  }
+
+  return { error: undefined, status: undefined }
 }
 
 export async function GET(request: NextRequest) {
@@ -62,17 +95,28 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const isPrivileged = ['Admin', 'Editor'].includes(user.role)
-    if (!isPrivileged && user.matricula !== matriculaNumber) {
+    const isSelf = user.matricula === matriculaNumber
+    const canManage = await canManageUserFunctionalities(user)
+
+    if (!isSelf && !canManage) {
       return NextResponse.json(
-        { success: false, error: 'Acesso negado' },
+        {
+          success: false,
+          error:
+            'Acesso negado. A funcionalidade editar_funcionalidades_usuarios e obrigatoria.'
+        },
         { status: 403 }
       )
     }
 
-    const { data: userFunctionalities, error } = await supabase
+    const manageableFunctionalityIds = canManage
+      ? await getManageableFunctionalityIds(user)
+      : []
+
+    let query = supabase
       .from('funcionalidade_usuarios')
-      .select(`
+      .select(
+        `
         *,
         funcionalidade:modulo_funcionalidades(
           id,
@@ -85,8 +129,22 @@ export async function GET(request: NextRequest) {
             tipo
           )
         )
-      `)
+      `
+      )
       .eq('matricula_usuario', matriculaNumber)
+
+    if (canManage) {
+      if (manageableFunctionalityIds.length === 0) {
+        return NextResponse.json({
+          success: true,
+          userFunctionalities: []
+        })
+      }
+
+      query = query.in('funcionalidade_id', manageableFunctionalityIds)
+    }
+
+    const { data: userFunctionalities, error } = await query
 
     if (error) {
       console.error('Erro ao buscar funcionalidades do usuario:', error)
@@ -111,11 +169,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const { error: authError, status: authStatus } = await verifyAuth(request, {
-      requirePrivileged: true
-    })
+    const { user, error: authError, status: authStatus } = await verifyAuth(request)
     if (authError) {
       return NextResponse.json({ error: authError }, { status: authStatus || 401 })
+    }
+    if (!user) {
+      return NextResponse.json({ error: 'Usuario nao autenticado' }, { status: 401 })
     }
 
     const body = await request.json()
@@ -126,6 +185,14 @@ export async function POST(request: NextRequest) {
         { success: false, error: 'Matricula do usuario e ID da funcionalidade sao obrigatorios' },
         { status: 400 }
       )
+    }
+
+    const { error: accessError, status: accessStatus } = await validateManagedFunctionalityAccess(
+      user,
+      funcionalidade_id
+    )
+    if (accessError) {
+      return NextResponse.json({ success: false, error: accessError }, { status: accessStatus || 403 })
     }
 
     const { data: existing, error: checkError } = await supabase
@@ -182,11 +249,12 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { error: authError, status: authStatus } = await verifyAuth(request, {
-      requirePrivileged: true
-    })
+    const { user, error: authError, status: authStatus } = await verifyAuth(request)
     if (authError) {
       return NextResponse.json({ error: authError }, { status: authStatus || 401 })
+    }
+    if (!user) {
+      return NextResponse.json({ error: 'Usuario nao autenticado' }, { status: 401 })
     }
 
     const body = await request.json()
@@ -197,6 +265,14 @@ export async function DELETE(request: NextRequest) {
         { success: false, error: 'Matricula do usuario e ID da funcionalidade sao obrigatorios' },
         { status: 400 }
       )
+    }
+
+    const { error: accessError, status: accessStatus } = await validateManagedFunctionalityAccess(
+      user,
+      funcionalidade_id
+    )
+    if (accessError) {
+      return NextResponse.json({ success: false, error: accessError }, { status: accessStatus || 403 })
     }
 
     const { error } = await supabase

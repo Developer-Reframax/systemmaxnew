@@ -20,9 +20,23 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url)
     const contrato = searchParams.get('contrato')
+    const natureId = searchParams.get('nature_id') || searchParams.get('natureza_id')
     const page = parseInt(searchParams.get('page') || '1')
     const limit = parseInt(searchParams.get('limit') || '10')
     const offset = (page - 1) * limit
+
+    let effectiveContract = contrato
+    if (authResult.user?.matricula) {
+      const { data: usuarioContrato } = await supabase
+        .from('usuarios')
+        .select('contrato_raiz')
+        .eq('matricula', authResult.user.matricula)
+        .maybeSingle()
+
+      if (usuarioContrato?.contrato_raiz) {
+        effectiveContract = usuarioContrato.contrato_raiz
+      }
+    }
 
     let query = supabase
       .from('tipos')
@@ -30,8 +44,8 @@ export async function GET(request: NextRequest) {
       .order('created_at', { ascending: false })
 
     // Filtrar por contrato se especificado
-    if (contrato) {
-      query = query.eq('contrato', contrato)
+    if (effectiveContract) {
+      query = query.eq('contrato', effectiveContract)
     }
 
     // Aplicar paginação
@@ -47,15 +61,29 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    let filteredTipos = tipos || []
+    if (natureId) {
+      const filtered = filteredTipos.filter((item: Record<string, unknown>) => {
+        const relationId = item.natureza_id ?? item.nature_id
+        return relationId !== undefined && relationId !== null
+          ? String(relationId) === natureId
+          : true
+      })
+
+      if (filtered.length > 0 || filteredTipos.some((item: Record<string, unknown>) => item.natureza_id !== undefined || item.nature_id !== undefined)) {
+        filteredTipos = filtered
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      data: tipos,
-      total: count || 0,
+      data: filteredTipos,
+      total: natureId ? filteredTipos.length : count || 0,
       pagination: {
         page,
         limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit)
+        total: natureId ? filteredTipos.length : count || 0,
+        totalPages: Math.ceil(((natureId ? filteredTipos.length : count) || 0) / limit)
       }
     })
 

@@ -7,6 +7,16 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 
+function canManageDesvioImages(
+  user: NonNullable<Awaited<ReturnType<typeof verifyJWTToken>>['user']>,
+  desvio: { matricula_user?: number | null; contrato?: string | null }
+) {
+  const isAdminOrEditor = ['Admin', 'Editor'].includes(user.role)
+  const isOwner = desvio.matricula_user === user.matricula
+  const sameContract = !!user.contrato_raiz && desvio.contrato === user.contrato_raiz
+  return sameContract && (isAdminOrEditor || isOwner)
+}
+
 // POST - Salvar URL da imagem na tabela imagens_desvios
 export async function POST(request: NextRequest) {
   try {
@@ -15,6 +25,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: authResult.error },
         { status: authResult.status }
+      )
+    }
+
+    if (!authResult.user) {
+      return NextResponse.json(
+        { success: false, message: 'Usuario nao autenticado' },
+        { status: 401 }
       )
     }
 
@@ -32,9 +49,16 @@ export async function POST(request: NextRequest) {
     // Verificar se o desvio existe
     const { data: desvio, error: desvioError } = await supabase
       .from('desvios')
-      .select('id')
+      .select('id, matricula_user, contrato')
       .eq('id', desvio_id)
       .single()
+
+    if (!desvioError && desvio && !canManageDesvioImages(authResult.user, desvio)) {
+      return NextResponse.json(
+        { success: false, message: 'Acesso negado para anexar imagens neste desvio' },
+        { status: 403 }
+      )
+    }
 
     if (desvioError || !desvio) {
       return NextResponse.json(
@@ -91,6 +115,13 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    if (!authResult.user) {
+      return NextResponse.json(
+        { success: false, message: 'Usuario nao autenticado' },
+        { status: 401 }
+      )
+    }
+
     const { searchParams } = new URL(request.url)
     const desvio_id = searchParams.get('desvio_id')
 
@@ -98,6 +129,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: 'desvio_id é obrigatório' },
         { status: 400 }
+      )
+    }
+
+    const { data: desvio, error: desvioError } = await supabase
+      .from('desvios')
+      .select('id, matricula_user, contrato')
+      .eq('id', desvio_id)
+      .single()
+
+    if (desvioError || !desvio) {
+      return NextResponse.json(
+        { success: false, message: 'Desvio nao encontrado' },
+        { status: 404 }
+      )
+    }
+
+    if (!canManageDesvioImages(authResult.user, desvio)) {
+      return NextResponse.json(
+        { success: false, message: 'Acesso negado para visualizar imagens deste desvio' },
+        { status: 403 }
       )
     }
 
