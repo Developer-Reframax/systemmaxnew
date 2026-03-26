@@ -17,6 +17,41 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+async function getUserContract(matricula?: number | null, contratoToken?: string | null) {
+  if (contratoToken) {
+    return contratoToken;
+  }
+
+  if (!matricula) {
+    return null;
+  }
+
+  const { data: usuarioContrato, error } = await supabase
+    .from('usuarios')
+    .select('contrato_raiz')
+    .eq('matricula', matricula)
+    .single();
+
+  if (error) {
+    console.error('Erro ao buscar contrato_raiz do usuario em execucoes_inspecao:', error);
+    return null;
+  }
+
+  return usuarioContrato?.contrato_raiz || null;
+}
+
+function normalizeSearchText(value: unknown) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function getSingleRelation<T>(value: T | T[] | null | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
 // Se existir pergunta impeditiva nao conforme em checklist, marcar equipamento como impedido
 async function marcarEquipamentoImpedidoSeNecessario(
   formularioId: string | null | undefined,
@@ -68,12 +103,24 @@ export async function GET(request: NextRequest) {
     const formulario_id = searchParams.get('formulario_id');
     const status = searchParams.get('status');
     const executor = searchParams.get('executor');
+    const search = searchParams.get('search')?.trim() || '';
     const local_id = searchParams.get('local_id');
     const data_inicio = searchParams.get('data_inicio');
     const data_fim = searchParams.get('data_fim');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
+    const contratoRaiz = await getUserContract(
+      authResult.user?.matricula ?? null,
+      authResult.user?.contrato_raiz ?? null
+    );
+
+    if (!contratoRaiz) {
+      return NextResponse.json(
+        { error: 'Usuario autenticado sem contrato_raiz definido' },
+        { status: 400 }
+      );
+    }
 
     // Construir query com joins
     let query = supabase
@@ -89,6 +136,8 @@ export async function GET(request: NextRequest) {
         )
       `, { count: 'exact' })
       .order('created_at', { ascending: false });
+
+    query = query.eq('contrato', contratoRaiz);
 
     // Filtrar por contrato_raiz do usu�rio (RLS)
     if (authResult.user?.contrato_raiz) {
@@ -121,7 +170,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Aplicar pagina��o
-    query = query.range(offset, offset + limit - 1);
+    if (!search) {
+      query = query.range(offset, offset + limit - 1);
+    }
 
     const { data: execucoes, error, count } = await query;
 
@@ -130,14 +181,35 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
     }
 
+    let filteredExecucoes = execucoes || [];
+    let total = count || 0;
+
+    if (search) {
+      const normalizedSearch = normalizeSearchText(search);
+
+      filteredExecucoes = filteredExecucoes.filter((execucao) => {
+        const formulario = getSingleRelation(execucao.formulario) as { titulo?: string } | null;
+        const local = getSingleRelation(execucao.local) as { local?: string } | null;
+        const executorInfo = getSingleRelation(execucao.executor) as { nome?: string } | null;
+
+        return [formulario?.titulo, local?.local, executorInfo?.nome].some((value) =>
+          normalizeSearchText(value).includes(normalizedSearch)
+        );
+      });
+
+      total = filteredExecucoes.length;
+      filteredExecucoes = filteredExecucoes.slice(offset, offset + limit);
+    }
+
     return NextResponse.json({
       success: true,
-      data: execucoes,
+      data: filteredExecucoes,
       pagination: {
         page,
         limit,
-        total: count || 0,
-        totalPages: Math.ceil((count || 0) / limit)
+        total,
+        totalItems: total,
+        totalPages: Math.ceil(total / limit)
       }
     });
 

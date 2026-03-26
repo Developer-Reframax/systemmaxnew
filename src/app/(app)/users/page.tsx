@@ -43,6 +43,18 @@ interface TeamOption {
   supervisor: string
 }
 
+function normalizeSearchValue(value: unknown) {
+  if (typeof value === 'string') {
+    return value.toLowerCase()
+  }
+
+  if (typeof value === 'number') {
+    return String(value).toLowerCase()
+  }
+
+  return ''
+}
+
 export default function UsersPage() {
   const { user } = useAuth()
   // TODO: Preencha estes slugs com os valores configurados nas tabelas:
@@ -726,11 +738,23 @@ export default function UsersPage() {
   // Verificar se o usurio logado pode deletar usurios
   const canDeleteUsers = currentUserHasFunctionality('f98bff3d-38e2-4af1-b9c3-8ed1487ad39a') && canDeleteUsersByPermissions
 
-  const filteredUsers = users.filter(user =>
-    user.nome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.matricula.toString().includes(searchTerm.toLowerCase())
-  )
+  const normalizedSearchTerm = searchTerm.trim().toLowerCase()
+
+  const filteredUsers = users.filter((user) => {
+    if (!normalizedSearchTerm) {
+      return true
+    }
+
+    const nome = normalizeSearchValue(user.nome)
+    const email = normalizeSearchValue(user.email)
+    const matricula = normalizeSearchValue(user.matricula)
+
+    return (
+      nome.includes(normalizedSearchTerm) ||
+      email.includes(normalizedSearchTerm) ||
+      matricula.includes(normalizedSearchTerm)
+    )
+  })
 
   const groupedFunctionalities = useMemo(() => {
     const groups: Record<string, Funcionalidade[]> = {}

@@ -48,6 +48,8 @@ interface Responsavel {
   email?: string
 }
 
+type DesvioStatus = 'Aguardando Avaliação' | 'Em Andamento' | 'Vencido' | 'Concluído'
+
 interface Potencial {
   id: string
   potencial_sede: string
@@ -87,6 +89,71 @@ interface EditFormData {
   ver_agir: boolean
   acao_cliente: boolean
   gerou_recusa: boolean
+}
+
+function parseDateOnly(dateString?: string | null) {
+  if (!dateString) return null
+
+  const normalizedDate = String(dateString).slice(0, 10)
+  if (!normalizedDate) return null
+
+  const parsedDate = new Date(`${normalizedDate}T00:00:00`)
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate
+}
+
+function isDeadlineExpired(dateString?: string | null) {
+  const deadline = parseDateOnly(dateString)
+  if (!deadline) return false
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  return deadline < today
+}
+
+function deriveEditStatus({
+  responsavel,
+  dataConclusao,
+  dataLimite
+}: {
+  responsavel?: string | null
+  dataConclusao?: string | null
+  dataLimite?: string | null
+}): DesvioStatus {
+  if (dataConclusao?.trim()) {
+    return 'Concluído'
+  }
+
+  if (responsavel?.trim()) {
+    return isDeadlineExpired(dataLimite) ? 'Vencido' : 'Em Andamento'
+  }
+
+  return 'Aguardando Avaliação'
+}
+
+function ensureSelectedOption(options: Option[], selectedId?: string | null, selectedLabel?: string | null) {
+  if (!selectedId || !selectedLabel) {
+    return options
+  }
+
+  return options.some((option) => option.id === selectedId)
+    ? options
+    : [{ id: selectedId, label: selectedLabel }, ...options]
+}
+
+function resolveSelectedOptionId(options: Option[], selectedId?: string | null, selectedLabel?: string | null) {
+  const normalizedId = selectedId?.trim() || ''
+  if (normalizedId && options.some((option) => option.id === normalizedId)) {
+    return normalizedId
+  }
+
+  const normalizedLabel = selectedLabel?.trim().toLowerCase()
+  if (!normalizedLabel) {
+    return normalizedId
+  }
+
+  const matchedOption = options.find((option) => option.label.trim().toLowerCase() === normalizedLabel)
+  return matchedOption?.id || normalizedId
 }
 
 interface Filtros {
@@ -207,7 +274,7 @@ export default function DesviosGerais() {
   const loadNaturezas = useCallback(async (contrato?: string | null) => {
     if (!contrato) {
       setNaturezas([])
-      return
+      return []
     }
 
     const response = await fetch(`/api/security-params/natures?contrato=${encodeURIComponent(contrato)}&limit=500`, {
@@ -220,19 +287,22 @@ export default function DesviosGerais() {
 
     const data = await response.json()
     if (data.success) {
-      setNaturezas(
-        (data.data || []).map((item: { id: string; natureza: string }) => ({
-          id: String(item.id),
-          label: item.natureza
-        }))
-      )
+      const options = (data.data || []).map((item: { id: string; natureza: string }) => ({
+        id: String(item.id),
+        label: item.natureza
+      }))
+      setNaturezas(options)
+      return options
     }
+
+    setNaturezas([])
+    return []
   }, [])
 
   const loadTipos = useCallback(async (naturezaId?: string, contrato?: string | null) => {
     if (!naturezaId || !contrato) {
       setTipos([])
-      return
+      return []
     }
 
     const response = await fetch(
@@ -246,13 +316,16 @@ export default function DesviosGerais() {
 
     const data = await response.json()
     if (data.success) {
-      setTipos(
-        (data.data || []).map((item: { id: string; tipo: string }) => ({
-          id: String(item.id),
-          label: item.tipo
-        }))
-      )
+      const options = (data.data || []).map((item: { id: string; tipo: string }) => ({
+        id: String(item.id),
+        label: item.tipo
+      }))
+      setTipos(options)
+      return options
     }
+
+    setTipos([])
+    return []
   }, [])
 
   const loadRiscos = useCallback(async () => {
@@ -321,13 +394,50 @@ export default function DesviosGerais() {
         avaliador_nome: result.data?.avaliador_nome || desvioPreview.avaliador_nome || null
       } as DesvioDetalhe
       const contrato = data.contrato || user?.contrato_raiz || null
+      const naturezaId = data.natureza_id ? String(data.natureza_id) : data.natureza?.id ? String(data.natureza.id) : ''
+      const tipoId = data.tipo_id ? String(data.tipo_id) : data.tipo?.id ? String(data.tipo.id) : ''
 
       setEditingDesvio(data)
+
+      const [naturezasOptions] = await Promise.all([
+        loadNaturezas(contrato),
+        loadLocais(contrato),
+        loadRiscos()
+      ])
+
+      const resolvedNaturezaId = resolveSelectedOptionId(
+        naturezasOptions,
+        naturezaId,
+        data.natureza?.natureza || null
+      )
+
+      setNaturezas((prev) =>
+        ensureSelectedOption(prev, resolvedNaturezaId, data.natureza?.natureza || null)
+      )
+
+      let resolvedTipoId = tipoId
+
+      if (resolvedNaturezaId) {
+        const tiposOptions = await loadTipos(resolvedNaturezaId, contrato)
+        resolvedTipoId = resolveSelectedOptionId(
+          tiposOptions,
+          tipoId,
+          data.tipo?.tipo || null
+        )
+
+        setTipos((prev) =>
+          ensureSelectedOption(prev, resolvedTipoId, data.tipo?.tipo || null)
+        )
+      } else {
+        setTipos([])
+        resolvedTipoId = ''
+      }
+
       setEditFormData({
         local: data.local || '',
         data_ocorrencia: formatDateForInput(data.data_ocorrencia || data.created_at),
-        natureza_id: data.natureza_id ? String(data.natureza_id) : data.natureza?.id ? String(data.natureza.id) : '',
-        tipo_id: data.tipo_id ? String(data.tipo_id) : data.tipo?.id ? String(data.tipo.id) : '',
+        natureza_id: resolvedNaturezaId,
+        tipo_id: resolvedTipoId,
         riscoassociado_id: data.riscoassociado_id ? String(data.riscoassociado_id) : '',
         potencial: data.potencial || '',
         potencial_local: data.potencial_local || '',
@@ -339,21 +449,6 @@ export default function DesviosGerais() {
         acao_cliente: Boolean(data.acao_cliente),
         gerou_recusa: Boolean(data.gerou_recusa)
       })
-
-      await Promise.all([
-        loadNaturezas(contrato),
-        loadLocais(contrato),
-        loadRiscos()
-      ])
-
-      const naturezaId =
-        data.natureza_id ? String(data.natureza_id) : data.natureza?.id ? String(data.natureza.id) : ''
-
-      if (naturezaId) {
-        await loadTipos(naturezaId, contrato)
-      } else {
-        setTipos([])
-      }
     } catch (error) {
       console.error('Erro ao abrir edição do desvio:', error)
       toast.error(error instanceof Error ? error.message : 'Erro ao carregar dados do desvio')
@@ -373,6 +468,17 @@ export default function DesviosGerais() {
       return
     }
 
+    if (editFormData.data_conclusao && !editFormData.responsavel) {
+      toast.error('Informe o responsavel para concluir o desvio')
+      return
+    }
+
+    const calculatedStatus = deriveEditStatus({
+      responsavel: editFormData.responsavel,
+      dataConclusao: editFormData.data_conclusao,
+      dataLimite: editingDesvio.data_limite
+    })
+
     try {
       setSavingEdit(true)
 
@@ -391,6 +497,7 @@ export default function DesviosGerais() {
           potencial: editFormData.potencial || null,
           potencial_local: editFormData.potencial_local || null,
           responsavel: editFormData.responsavel || null,
+          status: calculatedStatus,
           data_conclusao: editFormData.data_conclusao || null,
           acao: editFormData.acao || null,
           observacao: editFormData.observacao || null,
@@ -426,6 +533,16 @@ export default function DesviosGerais() {
           potencial: potencial.potencial_sede || potencial.potencial_local
         })),
     [potenciais, user?.contrato_raiz]
+  )
+
+  const editStatus = useMemo(
+    () =>
+      deriveEditStatus({
+        responsavel: editFormData.responsavel,
+        dataConclusao: editFormData.data_conclusao,
+        dataLimite: editingDesvio?.data_limite
+      }),
+    [editFormData.data_conclusao, editFormData.responsavel, editingDesvio?.data_limite]
   )
 
   const loadDesvios = useCallback(async () => {
@@ -514,7 +631,7 @@ export default function DesviosGerais() {
 
 
       // Carregar responsáveis
-      const responsaveisResponse = await fetch('/api/users', {
+      const responsaveisResponse = await fetch('/api/desvios/responsaveis', {
         method: 'GET'
       })
 
@@ -1228,6 +1345,7 @@ export default function DesviosGerais() {
                       <select
                         value={editFormData.responsavel}
                         onChange={(event) => setEditFormData((prev) => ({ ...prev, responsavel: event.target.value }))}
+                        required={Boolean(editFormData.data_conclusao)}
                         className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
                       >
                         <option value="">Não atribuído</option>
@@ -1237,6 +1355,19 @@ export default function DesviosGerais() {
                           </option>
                         ))}
                       </select>
+                    </div>
+
+                    <div>
+                      <label className="mb-1 block text-sm font-medium text-gray-700">Status</label>
+                      <input
+                        type="text"
+                        value={editStatus}
+                        disabled
+                        className="w-full rounded-md border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-600"
+                      />
+                      <p className="mt-1 text-xs text-gray-500">
+                        Calculado automaticamente por responsavel, data limite e data de conclusao.
+                      </p>
                     </div>
 
                     <div>

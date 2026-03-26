@@ -71,6 +71,54 @@ function normalizeOccurrenceDateToCreatedAt(value: unknown) {
   return new Date(`${trimmed}T12:00:00.000Z`).toISOString()
 }
 
+function parseDateOnly(value: unknown) {
+  if (typeof value !== 'string') {
+    return null
+  }
+
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return null
+  }
+
+  const normalizedDate = trimmed.slice(0, 10)
+  const parsedDate = new Date(`${normalizedDate}T00:00:00`)
+
+  return Number.isNaN(parsedDate.getTime()) ? null : parsedDate
+}
+
+function isDeadlineExpired(value: unknown) {
+  const deadline = parseDateOnly(value)
+  if (!deadline) {
+    return false
+  }
+
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+
+  return deadline < today
+}
+
+function deriveDesvioStatus({
+  responsavel,
+  dataConclusao,
+  dataLimite
+}: {
+  responsavel: unknown
+  dataConclusao: unknown
+  dataLimite: unknown
+}) {
+  if (normalizeOptionalString(dataConclusao)) {
+    return 'Concluído'
+  }
+
+  if (normalizeForeignKey(responsavel)) {
+    return isDeadlineExpired(dataLimite) ? 'Vencido' : 'Em Andamento'
+  }
+
+  return 'Aguardando Avaliação'
+}
+
 async function userHasSesmtPermission(
   user: NonNullable<Awaited<ReturnType<typeof verifyJWTToken>>['user']>
 ) {
@@ -648,6 +696,34 @@ export async function PUT(request: NextRequest) {
         sanitizedUpdateData.created_at = createdAtFromOccurrence
       }
     }
+
+    if (Object.keys(sanitizedUpdateData).length === 0) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: 'Nenhum campo editÃ¡vel foi informado. DescriÃ§Ã£o e dados do relatante nÃ£o podem ser alterados.'
+        },
+        { status: 400 }
+      )
+    }
+
+    const resolvedResponsavel =
+      'responsavel' in sanitizedUpdateData ? sanitizedUpdateData.responsavel : existingDesvio.responsavel
+    const resolvedDataConclusao =
+      'data_conclusao' in sanitizedUpdateData ? sanitizedUpdateData.data_conclusao : existingDesvio.data_conclusao
+
+    if (normalizeOptionalString(resolvedDataConclusao) && !normalizeForeignKey(resolvedResponsavel)) {
+      return NextResponse.json(
+        { success: false, message: 'Responsável é obrigatório quando a data de conclusão é informada' },
+        { status: 400 }
+      )
+    }
+
+    sanitizedUpdateData.status = deriveDesvioStatus({
+      responsavel: resolvedResponsavel,
+      dataConclusao: resolvedDataConclusao,
+      dataLimite: existingDesvio.data_limite
+    })
 
     if (Object.keys(sanitizedUpdateData).length === 0) {
       return NextResponse.json(
