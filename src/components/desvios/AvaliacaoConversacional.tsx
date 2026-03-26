@@ -90,7 +90,7 @@ interface Potencial {
 
 
 interface Usuario {
-  id: string
+  id?: string
   nome: string
   email: string
   matricula: string
@@ -288,24 +288,20 @@ export default function AvaliacaoConversacional({ isOpen, onClose, desvio, onSuc
 
   const loadUsuarios = useCallback(async () => {
     try {
-      const response = await fetch('/api/users', {
+      const response = await fetch('/api/desvios/responsaveis', {
         method: 'GET'
       })
       
       if (response.ok) {
         const data = await response.json()
         if (data.success) {
-          // Filtrar usuários do mesmo contrato_raiz
-          const usuariosMesmoContrato = data.users.filter((usuario: Usuario) => 
-            usuario.contrato_raiz === user?.contrato_raiz
-          )
-          setUsuarios(usuariosMesmoContrato)
+          setUsuarios(data.users || [])
         }
       }
     } catch (error) {
       console.error('Erro ao carregar usuários:', error)
     }
-  }, [user?.contrato_raiz])
+  }, [])
 
  
 

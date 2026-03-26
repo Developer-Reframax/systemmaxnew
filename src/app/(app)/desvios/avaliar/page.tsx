@@ -51,7 +51,7 @@ interface Desvio {
 }
 
 interface Usuario {
-  id: string;
+  id?: string;
   nome: string;
   email: string;
   matricula: string;
@@ -186,14 +186,14 @@ export default function AvaliarDesvios() {
     try {
       setLoadingUsuarios(true)
       
-      const response = await fetch('/api/users', {
-       method: 'GET'
+      const response = await fetch('/api/desvios/responsaveis', {
+        method: 'GET'
       })
 
       if (response.ok) {
         const data = await response.json()
         if (data.success) {
-          setUsuarios(data.users)
+          setUsuarios(data.users || [])
         }
       }
     } catch (error) {
@@ -731,7 +731,7 @@ export default function AvaliarDesvios() {
                       >
                         <option value="">Selecione um responsável</option>
                         {usuarios.map((usuario) => (
-                          <option key={usuario.id} value={usuario.matricula}>
+                          <option key={usuario.matricula} value={usuario.matricula}>
                             {usuario.nome} ({usuario.email})
                           </option>
                         ))}
