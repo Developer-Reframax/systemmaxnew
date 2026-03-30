@@ -1,40 +1,55 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyJWTToken } from '@/lib/jwt-middleware';
+import { userHasFunctionality } from '@/lib/permissions-server';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET /api/boas-praticas/elimina-desperdicio - Listar opções de eliminação de desperdício
+const BOASPRATICAS_GESTAO_GERAL_SLUG = 'boaspraticas-gestao-geral';
+
+async function ensureGestaoGeralAccess(request: NextRequest) {
+  const authResult = await verifyJWTToken(request);
+  if (!authResult.success) {
+    return {
+      authorized: false as const,
+      response: NextResponse.json({ error: authResult.error }, { status: 401 })
+    };
+  }
+
+  const allowed = await userHasFunctionality(authResult.user!, BOASPRATICAS_GESTAO_GERAL_SLUG);
+  if (!allowed) {
+    return {
+      authorized: false as const,
+      response: NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    };
+  }
+
+  return { authorized: true as const };
+}
+
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
-    const authResult = await verifyJWTToken(request);
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 });
-    }
+    const access = await ensureGestaoGeralAccess(request);
+    if (!access.authorized) return access.response;
 
-    // Parâmetros de consulta
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const offset = (page - 1) * limit;
 
-    // Construir query
     let query = supabase
       .from('boaspraticas_elimina_desperdicio')
       .select('*', { count: 'exact' })
       .order('nome');
 
-    // Aplicar filtro de busca
     if (search) {
       query = query.or(`nome.ilike.%${search}%,descricao.ilike.%${search}%`);
     }
 
-    // Aplicar paginação
     query = query.range(offset, offset + limit - 1);
 
     const { data: opcoes, error, count } = await query;
@@ -54,38 +69,24 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil((count || 0) / limit)
       }
     });
-
   } catch (error) {
     console.error('Erro na API de eliminação de desperdício:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
 
-// POST /api/boas-praticas/elimina-desperdicio - Criar nova opção de eliminação de desperdício
 export async function POST(request: NextRequest) {
   try {
-    // Verificar autenticação
-    const authResult = await verifyJWTToken(request);
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 });
-    }
-
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!authResult.user?.role || !['Admin', 'Editor'].includes(authResult.user.role)) {
-      return NextResponse.json({ error: 'Acesso negado. Apenas administradores e editores podem criar opções de eliminação de desperdício.' }, { status: 403 });
-    }
+    const access = await ensureGestaoGeralAccess(request);
+    if (!access.authorized) return access.response;
 
     const body = await request.json();
     const { nome, descricao } = body;
 
-    // Validar campos obrigatórios
     if (!nome) {
-      return NextResponse.json({ 
-        error: 'Campo obrigatório: nome' 
-      }, { status: 400 });
+      return NextResponse.json({ error: 'Campo obrigatório: nome' }, { status: 400 });
     }
 
-    // Verificar se já existe opção com o mesmo nome
     const { data: opcaoExistente } = await supabase
       .from('boaspraticas_elimina_desperdicio')
       .select('id')
@@ -93,18 +94,14 @@ export async function POST(request: NextRequest) {
       .single();
 
     if (opcaoExistente) {
-      return NextResponse.json({ 
-        error: 'Já existe uma opção de eliminação de desperdício com este nome' 
+      return NextResponse.json({
+        error: 'Já existe uma opção de eliminação de desperdício com este nome'
       }, { status: 409 });
     }
 
-    // Inserir opção de eliminação de desperdício
     const { data: novaOpcao, error: insertError } = await supabase
       .from('boaspraticas_elimina_desperdicio')
-      .insert({
-        nome,
-        descricao
-      })
+      .insert({ nome, descricao })
       .select()
       .single();
 
@@ -113,11 +110,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Erro ao criar opção de eliminação de desperdício' }, { status: 500 });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: novaOpcao
-    }, { status: 201 });
-
+    return NextResponse.json({ success: true, data: novaOpcao }, { status: 201 });
   } catch (error) {
     console.error('Erro na API de criação de opção de eliminação de desperdício:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
