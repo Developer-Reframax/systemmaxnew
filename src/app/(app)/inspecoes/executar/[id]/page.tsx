@@ -60,10 +60,10 @@ interface Local {
 
 interface Usuario {
   matricula: string;
-  nome: string;
-  email: string;
-  role: string;
-  status: string;
+  nome: string | null;
+  email: string | null;
+  role: string | null;
+  status: string | null;
 }
 
 interface Resposta {
@@ -91,6 +91,24 @@ interface RespostaExecucao {
 }
 
 type Etapa = 'local' | 'participantes' | 'perguntas' | 'finalizacao';
+
+const normalizeNullableText = (value: unknown) => (typeof value === 'string' ? value.trim() : '');
+
+const normalizeUsuario = (usuario: Partial<Usuario> & { matricula?: string | number | null }): Usuario | null => {
+  const matricula = usuario?.matricula != null ? String(usuario.matricula).trim() : '';
+  if (!matricula) return null;
+
+  return {
+    matricula,
+    nome: normalizeNullableText(usuario?.nome) || null,
+    email: normalizeNullableText(usuario?.email) || null,
+    role: normalizeNullableText(usuario?.role) || null,
+    status: normalizeNullableText(usuario?.status) || null
+  };
+};
+
+const getUsuarioNome = (usuario?: Usuario | null) => usuario?.nome || 'Nome nao informado';
+const getUsuarioEmail = (usuario?: Usuario | null) => usuario?.email || 'Email nao informado';
 
 function ExecutarFormularioPage() {
   const router = useRouter();
@@ -249,8 +267,8 @@ function ExecutarFormularioPage() {
 
   const usuariosPlanoAcao = usuarios.map(u => ({
     matricula: typeof u.matricula === 'number' ? u.matricula : parseInt(String(u.matricula), 10),
-    nome: u.nome,
-    email: u.email
+    nome: u.nome || 'Nome nao informado',
+    email: u.email || ''
   }));
 
   // Função para verificar se todas as perguntas foram respondidas
@@ -341,7 +359,10 @@ function ExecutarFormularioPage() {
 
       if (response.ok) {
         const data = await response.json();
-        setUsuarios(data.data || []);
+        const usuariosNormalizados = ((data.data || []) as Array<Partial<Usuario> & { matricula?: string | number | null }>)
+          .map((usuario) => normalizeUsuario(usuario))
+          .filter((usuario): usuario is Usuario => usuario !== null);
+        setUsuarios(usuariosNormalizados);
       }
     } catch (error) {
       console.error('Erro ao carregar usuários:', error);
@@ -461,10 +482,6 @@ function ExecutarFormularioPage() {
         setEtapaAtual('participantes');
         break;
       case 'participantes':
-        if (execucaoData.participantes.length === 0) {
-          toast.error('Adicione pelo menos um participante');
-          return;
-        }
         setEtapaAtual('perguntas');
         break;
       case 'perguntas': {
@@ -1014,8 +1031,8 @@ function ExecutarFormularioPage() {
                       return (
                         <div key={participanteId} className="flex items-center justify-between p-2 bg-blue-50 rounded-lg">
                           <div>
-                            <div className="font-medium">{usuario.nome}</div>
-                            <div className="text-sm text-gray-600">{usuario.email}</div>
+                            <div className="font-medium">{getUsuarioNome(usuario)}</div>
+                            <div className="text-sm text-gray-600">{getUsuarioEmail(usuario)}</div>
                           </div>
                           <Button
                             variant="ghost"
@@ -1041,18 +1058,20 @@ function ExecutarFormularioPage() {
                     .filter((usuario) => {
                       if (!searchUsuarios.trim()) return true;
                       const termo = searchUsuarios.trim().toLowerCase();
+                      const nome = normalizeNullableText(usuario.nome).toLowerCase();
+                      const email = normalizeNullableText(usuario.email).toLowerCase();
                       const matricula = String(usuario.matricula ?? '').toLowerCase();
                       return (
-                        usuario.nome.toLowerCase().includes(termo) ||
-                        usuario.email.toLowerCase().includes(termo) ||
+                        nome.includes(termo) ||
+                        email.includes(termo) ||
                         matricula.includes(termo)
                       );
                     })
                     .map((usuario) => (
                       <div key={usuario.matricula} className="flex items-center justify-between p-2 border rounded-lg">
                         <div>
-                          <div className="font-medium">{usuario.nome}</div>
-                          <div className="text-sm text-gray-600">{usuario.email}</div>
+                          <div className="font-medium">{getUsuarioNome(usuario)}</div>
+                          <div className="text-sm text-gray-600">{getUsuarioEmail(usuario)}</div>
                         </div>
                         <Button
                           variant="outline"

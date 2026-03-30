@@ -27,6 +27,7 @@ interface UsuarioBasico {
   nome?: string | null
   email?: string | null
   funcao?: string | null
+  contrato_raiz?: string | null
 }
 
 interface ParticipanteRegistro3P {
@@ -140,14 +141,14 @@ export async function GET(request: NextRequest) {
         tipo,
         created_at,
         area:locais(id, local, contrato),
-        criador:usuarios!registros_3ps_matricula_criador_fkey(matricula, nome, email, funcao),
+        criador:usuarios!registros_3ps_matricula_criador_fkey!inner(matricula, nome, email, funcao, contrato_raiz),
         participantes:participantes_3ps(
           id,
           matricula_participante,
           participante:usuarios!participantes_3ps_matricula_participante_fkey(matricula, nome, email, funcao)
         )
       `)
-      .eq('area.contrato', contrato)
+      .eq('criador.contrato_raiz', contrato)
       .order('created_at', { ascending: false })
 
     if (registrosError) {
@@ -159,13 +160,14 @@ export async function GET(request: NextRequest) {
       const areaInfo = firstItem(registro.area)
       const criadorInfo = firstItem(registro.criador)
       const creatorMatricula = criadorInfo?.matricula || null
+      const creatorContrato = criadorInfo?.contrato_raiz || null
       const creatorDetalhes = enrichUsuario(creatorMatricula, criadorInfo, usuariosMap)
       const baseRow = {
         registro_id: registro.id,
         data_hora_registro: registro.created_at || null,
         area_id: areaInfo?.id || null,
         area: areaInfo?.local || null,
-        contrato: areaInfo?.contrato || contrato,
+        contrato: creatorContrato || contrato,
         atividade: registro.atividade || null,
         tipo_3p: registro.tipo || null,
         paralisacao_realizada: registro.paralisacao_realizada ?? null,
