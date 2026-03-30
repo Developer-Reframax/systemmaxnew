@@ -188,6 +188,66 @@ export default function Colaboradores3P() {
     }
   }
 
+  const exportTableToExcel = async () => {
+    try {
+      const workbook = new ExcelJS.Workbook()
+      const worksheet = workbook.addWorksheet('Colaboradores 3P')
+
+      worksheet.columns = [
+        { header: 'Matricula', key: 'matricula', width: 14 },
+        { header: 'Nome', key: 'nome', width: 30 },
+        { header: 'Funcao', key: 'funcao', width: 24 },
+        { header: 'Equipe', key: 'equipe', width: 24 },
+        { header: 'Letra', key: 'letra', width: 14 },
+        { header: 'Data realizacao 3P', key: 'dataRealizacao3p', width: 20 },
+        { header: 'Fez 3P', key: 'fez3p', width: 12 },
+        { header: 'Criados', key: 'createdCount', width: 12 },
+        { header: 'Participacoes', key: 'participatedCount', width: 16 },
+        { header: 'Total', key: 'totalCount', width: 12 }
+      ]
+
+      colaboradores.forEach((colaborador) => {
+        worksheet.addRow({
+          matricula: colaborador.matricula,
+          nome: colaborador.nome,
+          funcao: colaborador.funcao || '-',
+          equipe: colaborador.equipe || '-',
+          letra: colaborador.letra || '-',
+          dataRealizacao3p: colaborador.dataRealizacao3p || '-',
+          fez3p: colaborador.fez3p ? 'Sim' : 'Nao',
+          createdCount: colaborador.createdCount,
+          participatedCount: colaborador.participatedCount,
+          totalCount: colaborador.totalCount
+        })
+      })
+
+      worksheet.getRow(1).font = { bold: true }
+      worksheet.getRow(1).fill = {
+        type: 'pattern',
+        pattern: 'solid',
+        fgColor: { argb: 'FFE6F3FF' }
+      }
+
+      const buffer = await workbook.xlsx.writeBuffer()
+      const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = window.URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+
+      const now = new Date()
+      const timestamp = now.toISOString().slice(0, 19).replace(/[:-]/g, '').replace('T', '_')
+      const fileName = `colaboradores_3ps_tabela_${timestamp}.xlsx`
+      link.download = fileName
+      link.click()
+      window.URL.revokeObjectURL(url)
+
+      toast.success(`Arquivo ${fileName} exportado com sucesso!`)
+    } catch (error) {
+      console.error('Erro ao exportar tabela para Excel:', error)
+      toast.error('Erro ao exportar tabela para Excel')
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -205,14 +265,24 @@ export default function Colaboradores3P() {
             {totalCom3p} de {colaboradores.length} colaboradores possuem participa&#231;&#227;o em 3P
           </p>
         </div>
-        <button
-          type="button"
-          onClick={exportToExcel}
-          className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-        >
-          <FileSpreadsheet className="w-4 h-4 mr-2" />
-          Exportar Excel
-        </button>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={exportTableToExcel}
+            className="inline-flex items-center px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700"
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Exportar Excel da tabela
+          </button>
+          <button
+            type="button"
+            onClick={exportToExcel}
+            className="inline-flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
+          >
+            <FileSpreadsheet className="w-4 h-4 mr-2" />
+            Exportar Excel
+          </button>
+        </div>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg shadow-sm">
