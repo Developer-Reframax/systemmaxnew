@@ -7,6 +7,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
+function normalizeNullableString(value: unknown) {
+  return typeof value === 'string' ? value : null;
+}
+
 // GET /api/inspecoes/usuarios - Listar usuarios disponiveis
 export async function GET(request: NextRequest) {
   try {
@@ -56,11 +60,20 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
     }
 
-    const total = count ?? usuarios?.length ?? 0;
+    const usuariosNormalizados = (usuarios || []).map((usuario) => ({
+      matricula: usuario?.matricula != null ? String(usuario.matricula) : '',
+      nome: normalizeNullableString(usuario?.nome),
+      email: normalizeNullableString(usuario?.email),
+      role: normalizeNullableString(usuario?.role),
+      status: normalizeNullableString(usuario?.status)
+    }))
+      .filter((usuario) => usuario.matricula !== '');
+
+    const total = count ?? usuariosNormalizados.length;
 
     return NextResponse.json({
       success: true,
-      data: usuarios || [],
+      data: usuariosNormalizados,
       pagination: {
         page: 1,
         limit: total,
