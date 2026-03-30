@@ -1,27 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyJWTToken } from '@/lib/jwt-middleware';
+import { userHasFunctionality } from '@/lib/permissions-server';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET /api/boas-praticas/categorias/[id] - Buscar categoria por ID
+const BOASPRATICAS_GESTAO_GERAL_SLUG = 'boaspraticas-gestao-geral';
+
+async function ensureGestaoGeralAccess(request: NextRequest) {
+  const authResult = await verifyJWTToken(request);
+  if (!authResult.success) {
+    return {
+      authorized: false as const,
+      response: NextResponse.json({ error: authResult.error }, { status: 401 })
+    };
+  }
+
+  const allowed = await userHasFunctionality(authResult.user!, BOASPRATICAS_GESTAO_GERAL_SLUG);
+  if (!allowed) {
+    return {
+      authorized: false as const,
+      response: NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
+    };
+  }
+
+  return { authorized: true as const };
+}
+
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
-    const authResult = await verifyJWTToken(request);
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 });
-    }
+    const access = await ensureGestaoGeralAccess(request);
+    if (!access.authorized) return access.response;
 
     const { id } = await params;
 
-    // Buscar categoria
     const { data: categoria, error } = await supabase
       .from('boaspraticas_categoria')
       .select('*')
@@ -36,46 +54,29 @@ export async function GET(
       return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: categoria
-    });
-
+    return NextResponse.json({ success: true, data: categoria });
   } catch (error) {
     console.error('Erro na API de categoria:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
 
-// PUT /api/boas-praticas/categorias/[id] - Atualizar categoria
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
-    const authResult = await verifyJWTToken(request);
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 });
-    }
-
-    // Verificar se o usuário tem permissão (Admin ou Editor)
-    if (!authResult.user?.role || !['Admin', 'Editor'].includes(authResult.user.role)) {
-      return NextResponse.json({ error: 'Acesso negado. Apenas administradores e editores podem editar categorias.' }, { status: 403 });
-    }
+    const access = await ensureGestaoGeralAccess(request);
+    if (!access.authorized) return access.response;
 
     const { id } = await params;
     const body = await request.json();
     const { nome, descricao } = body;
 
-    // Validar campos obrigatórios
     if (!nome) {
-      return NextResponse.json({ 
-        error: 'Campo obrigatório: nome' 
-      }, { status: 400 });
+      return NextResponse.json({ error: 'Campo obrigatório: nome' }, { status: 400 });
     }
 
-    // Verificar se a categoria existe
     const { data: categoriaExistente } = await supabase
       .from('boaspraticas_categoria')
       .select('id')
@@ -86,7 +87,6 @@ export async function PUT(
       return NextResponse.json({ error: 'Categoria não encontrada' }, { status: 404 });
     }
 
-    // Verificar se já existe outra categoria com o mesmo nome
     const { data: categoriaComMesmoNome } = await supabase
       .from('boaspraticas_categoria')
       .select('id')
@@ -95,18 +95,12 @@ export async function PUT(
       .single();
 
     if (categoriaComMesmoNome) {
-      return NextResponse.json({ 
-        error: 'Já existe uma categoria com este nome' 
-      }, { status: 409 });
+      return NextResponse.json({ error: 'Já existe uma categoria com este nome' }, { status: 409 });
     }
 
-    // Atualizar categoria
     const { data: categoriaAtualizada, error: updateError } = await supabase
       .from('boaspraticas_categoria')
-      .update({
-        nome,
-        descricao
-      })
+      .update({ nome, descricao })
       .eq('id', id)
       .select()
       .single();
@@ -116,37 +110,23 @@ export async function PUT(
       return NextResponse.json({ error: 'Erro ao atualizar categoria' }, { status: 500 });
     }
 
-    return NextResponse.json({
-      success: true,
-      data: categoriaAtualizada
-    });
-
+    return NextResponse.json({ success: true, data: categoriaAtualizada });
   } catch (error) {
     console.error('Erro na API de atualização de categoria:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });
   }
 }
 
-// DELETE /api/boas-praticas/categorias/[id] - Excluir categoria
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    // Verificar autenticação
-    const authResult = await verifyJWTToken(request);
-    if (!authResult.success) {
-      return NextResponse.json({ error: authResult.error }, { status: 401 });
-    }
-
-    // Verificar se o usuário tem permissão (Admin)
-    if (!authResult.user?.role || authResult.user.role !== 'Admin') {
-      return NextResponse.json({ error: 'Acesso negado. Apenas administradores podem excluir categorias.' }, { status: 403 });
-    }
+    const access = await ensureGestaoGeralAccess(request);
+    if (!access.authorized) return access.response;
 
     const { id } = await params;
 
-    // Verificar se a categoria existe
     const { data: categoria } = await supabase
       .from('boaspraticas_categoria')
       .select('id')
@@ -157,7 +137,6 @@ export async function DELETE(
       return NextResponse.json({ error: 'Categoria não encontrada' }, { status: 404 });
     }
 
-    // Verificar se existem boas práticas vinculadas a esta categoria
     const { data: boasPraticasVinculadas } = await supabase
       .from('boaspraticas')
       .select('id')
@@ -165,12 +144,11 @@ export async function DELETE(
       .limit(1);
 
     if (boasPraticasVinculadas && boasPraticasVinculadas.length > 0) {
-      return NextResponse.json({ 
-        error: 'Não é possível excluir esta categoria pois existem boas práticas vinculadas a ela' 
+      return NextResponse.json({
+        error: 'Não é possível excluir esta categoria pois existem boas práticas vinculadas a ela'
       }, { status: 409 });
     }
 
-    // Excluir categoria
     const { error: deleteError } = await supabase
       .from('boaspraticas_categoria')
       .delete()
@@ -181,11 +159,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Erro ao excluir categoria' }, { status: 500 });
     }
 
-    return NextResponse.json({
-      success: true,
-      message: 'Categoria excluída com sucesso'
-    });
-
+    return NextResponse.json({ success: true, message: 'Categoria excluída com sucesso' });
   } catch (error) {
     console.error('Erro na API de exclusão de categoria:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });

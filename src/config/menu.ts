@@ -41,7 +41,7 @@ export const menuItems: MenuItem[] = [
   { name: 'Equipes', href: '/teams', icon: 'userCheck', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'equipes', functionalitySlug: 'equipes-gestao' },
   { name: 'Almoxarifado', href: '/almoxarifado', icon: 'package', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'almoxarifado' },
   { name: 'Inspecoes e Checks', href: '/inspecoes', icon: 'clipboardList', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'inspecoes_checks' },
-  { name: 'Boas Praticas / Lab Ideias', href: '/boas-praticas', icon: 'lightbulb', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'boas_praticas' },
+  { name: 'Boas Praticas / Boas Idéias', href: '/boas-praticas', icon: 'lightbulb', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'boas_praticas' },
   { name: 'Apadrinhamento', href: '/apadrinhamento', icon: 'userPlus', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'apadrinhamento', functionalitySlug: 'apadrinhamento-acesso' },
   { name: "3 P's", href: '/3ps', icon: 'clipboardCheck', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: '3p', functionalitySlug: '3p-acesso' },
   { name: 'Relatos/Desvios', href: '/desvios', icon: 'alertTriangle', roles: ['Admin', 'Editor', 'Usuario'], moduleSlug: 'relatos_desvios' },

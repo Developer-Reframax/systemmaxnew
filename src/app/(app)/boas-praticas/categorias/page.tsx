@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { usePermissions } from '@/contexts/PermissionsContext';
 import { 
   Plus, 
   Search, 
@@ -30,7 +30,7 @@ interface NovaCategoria {
 
 function CategoriasBoasPraticasPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { permissions, loading: permissionsLoading } = usePermissions();
   const [categorias, setCategorias] = useState<Categoria[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -141,11 +141,19 @@ function CategoriasBoasPraticasPage() {
     }
   };
 
-  const canManage = () => {
-    return user && ['Admin', 'Editor'].includes(user.role);
-  };
+  const canManage = !permissionsLoading && !!permissions?.modulos.some((modulo) =>
+    modulo.funcionalidades.some((funcionalidade) => funcionalidade.slug === 'boaspraticas-gestao-geral')
+  );
 
-  if (!canManage()) {
+  if (loading || permissionsLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
+      </div>
+    );
+  }
+
+  if (!canManage) {
     return (
         <div className="container mx-auto p-6">
           <div className="text-center">
@@ -156,14 +164,6 @@ function CategoriasBoasPraticasPage() {
             </Button>
           </div>
         </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-600"></div>
-      </div>
     );
   }
 

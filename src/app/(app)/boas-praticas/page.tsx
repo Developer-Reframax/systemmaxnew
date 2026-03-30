@@ -20,6 +20,8 @@ import {
 
 export default function BoasPraticasPage() {
   const router = useRouter()
+  const BOAS_IDEIAS_FORM_URL =
+    'https://forms.office.com/Pages/ResponsePage.aspx?id=p2DZs4_mEEanKQQUrL5_SC1Khj_bYuNGgRfwieHhNtVUOFdYSEtESDEzSFVHSFRETFEzT0JWVzFJTi4u'
   useAuth()
   const { permissions, loading: permissionsLoading } = usePermissions()
   const BOASPRATICAS_CADASTRO_SLUG = 'boaspraticas-cadastro'
@@ -88,12 +90,12 @@ export default function BoasPraticasPage() {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1 sm:max-w-2xl">
-          <h1 className="text-3xl font-bold text-gray-900">Boas Praticas - Lab Ideias</h1>
+          <h1 className="text-3xl font-bold text-gray-900">Boas Praticas - Boas Idéias</h1>
           <p className="text-gray-600">Gestao de ideias e boas praticas da organizacao</p>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
           <Button
-            onClick={() => router.push('/boas-praticas')}
+            onClick={() => window.open(BOAS_IDEIAS_FORM_URL, '_blank', 'noopener,noreferrer')}
             className="bg-green-600 hover:bg-green-700 w-full sm:w-auto justify-center"
           >
             <Plus className="w-4 h-4 mr-2" />
