@@ -108,19 +108,6 @@ export async function PUT(
       }, { status: 400 });
     }
 
-    // Verificar se existem execuções vinculadas (não permite editar se houver)
-    const { data: execucoesVinculadas } = await supabase
-      .from('execucoes_inspecao')
-      .select('id')
-      .eq('formulario_id', id)
-      .limit(1);
-
-    if (execucoesVinculadas && execucoesVinculadas.length > 0) {
-      return NextResponse.json({ 
-        error: 'Não é possível editar este formulário pois existem execuções vinculadas a ele' 
-      }, { status: 409 });
-    }
-
     // Atualizar formulário
     const { error: updateError } = await supabase
       .from('formularios_inspecao')
