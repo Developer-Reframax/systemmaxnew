@@ -32,8 +32,10 @@ async function ensureGestaoGeralAccess(request: NextRequest) {
 
 export async function GET(request: NextRequest) {
   try {
-    const access = await ensureGestaoGeralAccess(request);
-    if (!access.authorized) return access.response;
+    const authResult = await verifyJWTToken(request);
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
 
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
