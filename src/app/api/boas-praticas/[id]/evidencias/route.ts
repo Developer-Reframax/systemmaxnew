@@ -8,6 +8,8 @@ const supabase = createClient(
 )
 
 const BUCKET = 'images-evidencia-boas-praticas'
+const MAX_SIZE = 10 * 1024 * 1024
+const ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
 
 export async function POST(
   request: NextRequest,
@@ -26,14 +28,34 @@ export async function POST(
       const categoria = String(form.get('categoria') || 'antes')
       const descricao = String(form.get('descricao') || '')
 
-      if (!file) return NextResponse.json({ error: 'Arquivo obrigatório' }, { status: 400 })
+      if (!file) return NextResponse.json({ error: 'Arquivo obrigatorio' }, { status: 400 })
+      if (file.size > MAX_SIZE) {
+        return NextResponse.json({ error: 'Cada imagem deve ter no maximo 10MB' }, { status: 400 })
+      }
+      if (!ALLOWED_MIME_TYPES.includes(file.type)) {
+        return NextResponse.json(
+          { error: 'Formato nao suportado. Use JPEG, PNG, GIF ou WEBP' },
+          { status: 400 }
+        )
+      }
 
       const fileName = `${id}/${Date.now()}-${file.name}`
       const { data: uploaded, error: uploadError } = await supabase.storage
         .from(BUCKET)
         .upload(fileName, file)
 
-      if (uploadError) return NextResponse.json({ error: 'Falha no upload' }, { status: 500 })
+      if (uploadError) {
+        console.error('Erro upload evidencia boa pratica:', uploadError)
+        const uploadMessage = uploadError.message || 'Falha no upload'
+        const isClientError =
+          uploadMessage.toLowerCase().includes('mime type') ||
+          uploadMessage.toLowerCase().includes('not supported')
+
+        return NextResponse.json(
+          { error: uploadMessage },
+          { status: isClientError ? 400 : 500 }
+        )
+      }
 
       const publicUrl = supabase.storage.from(BUCKET).getPublicUrl(uploaded.path).data.publicUrl
 
@@ -43,23 +65,32 @@ export async function POST(
         .select('*')
         .single()
 
-      if (error) return NextResponse.json({ error: 'Erro ao salvar evidência' }, { status: 500 })
-      return NextResponse.json({ success: true, data })
-    } else {
-      const body = await request.json()
-      const { url, categoria, descricao, is_video } = body
-      if (!url || !is_video) return NextResponse.json({ error: 'URL de vídeo obrigatória' }, { status: 400 })
-
-      const { data, error } = await supabase
-        .from('boaspraticas_evidencias')
-        .insert({ pratica_id: id, url, categoria: categoria || 'antes', descricao: descricao || null, is_video: true })
-        .select('*')
-        .single()
-
-      if (error) return NextResponse.json({ error: 'Erro ao salvar evidência' }, { status: 500 })
+      if (error) return NextResponse.json({ error: 'Erro ao salvar evidencia' }, { status: 500 })
       return NextResponse.json({ success: true, data })
     }
-  } catch {
+
+    const body = await request.json()
+    const { url, categoria, descricao, is_video } = body
+    if (!url || !is_video) {
+      return NextResponse.json({ error: 'URL de video obrigatoria' }, { status: 400 })
+    }
+
+    const { data, error } = await supabase
+      .from('boaspraticas_evidencias')
+      .insert({
+        pratica_id: id,
+        url,
+        categoria: categoria || 'antes',
+        descricao: descricao || null,
+        is_video: true
+      })
+      .select('*')
+      .single()
+
+    if (error) return NextResponse.json({ error: 'Erro ao salvar evidencia' }, { status: 500 })
+    return NextResponse.json({ success: true, data })
+  } catch (error) {
+    console.error('Erro interno upload evidencia boa pratica:', error)
     return NextResponse.json({ error: 'Erro interno' }, { status: 500 })
   }
 }

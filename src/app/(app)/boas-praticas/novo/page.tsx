@@ -66,6 +66,8 @@ interface EvidenciaItem {
   previewUrl?: string
 }
 
+const ALLOWED_EVIDENCIA_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
 function NovaBoaPraticaPage() {
   const router = useRouter()
   useAuth()
@@ -202,7 +204,7 @@ function NovaBoaPraticaPage() {
         if (evidencias.length > 0) {
           for (const ev of evidencias) {
             if (ev.is_video) {
-              await fetch(`/api/boas-praticas/${id}/evidencias`, {
+              const response = await fetch(`/api/boas-praticas/${id}/evidencias`, {
                 method: 'POST',
                 body: JSON.stringify({
                   url: ev.url,
@@ -211,16 +213,24 @@ function NovaBoaPraticaPage() {
                   is_video: true
                 })
               })
+              if (!response.ok) {
+                const err = await response.json().catch(() => null)
+                throw new Error(err?.error || err?.message || 'Erro ao enviar evidencia de video')
+              }
             } else if (ev.file) {
               const formDataUpload = new FormData()
               formDataUpload.append('file', ev.file)
               formDataUpload.append('categoria', ev.categoria)
               formDataUpload.append('descricao', ev.descricao || '')
 
-              await fetch(`/api/boas-praticas/${id}/evidencias`, {
+              const response = await fetch(`/api/boas-praticas/${id}/evidencias`, {
                 method: 'POST',
                 body: formDataUpload
               })
+              if (!response.ok) {
+                const err = await response.json().catch(() => null)
+                throw new Error(err?.error || err?.message || 'Erro ao enviar evidencia')
+              }
             }
           }
         }
@@ -364,8 +374,12 @@ function NovaBoaPraticaPage() {
         toast.error('Selecione uma imagem')
         return
       }
-      if (evidenciaFile.size > 5 * 1024 * 1024) {
-        toast.error('Cada imagem deve ter no maximo 5MB')
+      if (evidenciaFile.size > 10 * 1024 * 1024) {
+        toast.error('Cada imagem deve ter no maximo 10MB')
+        return
+      }
+      if (!ALLOWED_EVIDENCIA_MIME_TYPES.includes(evidenciaFile.type)) {
+        toast.error('Formato nao suportado. Use JPEG, PNG, GIF ou WEBP')
         return
       }
     } else {
@@ -738,12 +752,31 @@ function NovaBoaPraticaPage() {
 
               {evidenciaTipo === 'imagem' ? (
                 <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Imagem (max 5MB)</label>
+                  <label className="block text-sm font-medium text-gray-700">Imagem (max 10MB)</label>
                   <Input
                     key="evidencia-imagem"
                     type="file"
-                    accept="image/*"
-                    onChange={(e) => setEvidenciaFile(e.target.files?.[0] || null)}
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0] || null
+                      if (!file) {
+                        setEvidenciaFile(null)
+                        return
+                      }
+                      if (!ALLOWED_EVIDENCIA_MIME_TYPES.includes(file.type)) {
+                        toast.error('Formato nao suportado. Use JPEG, PNG, GIF ou WEBP')
+                        e.target.value = ''
+                        setEvidenciaFile(null)
+                        return
+                      }
+                      if (file.size > 10 * 1024 * 1024) {
+                        toast.error('Cada imagem deve ter no maximo 10MB')
+                        e.target.value = ''
+                        setEvidenciaFile(null)
+                        return
+                      }
+                      setEvidenciaFile(file)
+                    }}
                   />
                 </div>
               ) : (
