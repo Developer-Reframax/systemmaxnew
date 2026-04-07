@@ -17,7 +17,8 @@ import {
   Plus,
   Users,
   Tag,
-  Trash2
+  Trash2,
+  Video
 } from 'lucide-react'
 import { toast } from 'sonner'
 
@@ -51,10 +52,32 @@ interface FormData {
   envolvidos: number[]
 }
 
+interface EvidenciaExistente {
+  id: string
+  url: string
+  categoria: 'antes' | 'depois'
+  descricao?: string
+  is_video: boolean
+  nome_arquivo?: string
+}
+
+interface NovaEvidenciaItem {
+  id: string
+  is_video: boolean
+  file?: File
+  url?: string
+  categoria: 'antes' | 'depois'
+  descricao?: string
+  previewUrl?: string
+}
+
+const ALLOWED_EVIDENCIA_MIME_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
+
 function EditarBoaPraticaPage() {
   const params = useParams<{ id: string }>()
   const router = useRouter()
   useAuth()
+  const praticaId = params?.id ?? null
 
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -84,18 +107,26 @@ function EditarBoaPraticaPage() {
   const [fabricouDispositivo, setFabricouDispositivo] = useState<boolean | null>(null)
   const [projetoFile, setProjetoFile] = useState<File | null>(null)
   const [projetoUrl, setProjetoUrl] = useState<string | null>(null)
+  const [evidenciasExistentes, setEvidenciasExistentes] = useState<EvidenciaExistente[]>([])
+  const [evidenciasParaExcluir, setEvidenciasParaExcluir] = useState<string[]>([])
+  const [novasEvidencias, setNovasEvidencias] = useState<NovaEvidenciaItem[]>([])
+  const [evidenciaTipo, setEvidenciaTipo] = useState<'imagem' | 'video'>('imagem')
+  const [evidenciaFile, setEvidenciaFile] = useState<File | null>(null)
+  const [evidenciaUrl, setEvidenciaUrl] = useState('')
+  const [evidenciaCategoria, setEvidenciaCategoria] = useState<'antes' | 'depois'>('antes')
+  const [evidenciaDescricao, setEvidenciaDescricao] = useState('')
 
   useEffect(() => {
     const loadData = async () => {
       setLoading(true)
-      if (!params?.id) {
+      if (!praticaId) {
         setLoading(false)
         return
       }
 
       try {
         const [boaPraticaRes, pilaresRes, desperdiciosRes, categoriasRes, tagsRes, usuariosRes] = await Promise.all([
-          fetch(`/api/boas-praticas/${params.id}`, { method:'GET' }),
+          fetch(`/api/boas-praticas/${praticaId}`, { method:'GET' }),
           fetch('/api/boas-praticas/pilares', { method:'GET' }),
           fetch('/api/boas-praticas/elimina-desperdicio', { method:'GET' }),
           fetch('/api/boas-praticas/categorias', { method:'GET' }),
@@ -110,6 +141,27 @@ function EditarBoaPraticaPage() {
           const areaAplicadaTexto = data.area_aplicada ?? data.area_aplicada_nome ?? ''
           setFabricouDispositivo(!!data.fabricou_dispositivo)
           setProjetoUrl(data.projeto || null)
+          setEvidenciasExistentes(
+            Array.isArray(data.evidencias)
+              ? data.evidencias.map((e: {
+                  id: string
+                  url: string
+                  categoria?: 'antes' | 'depois'
+                  descricao?: string
+                  is_video?: boolean
+                  nome_arquivo?: string
+                }) => ({
+                  id: e.id,
+                  url: e.url,
+                  categoria: e.categoria || 'antes',
+                  descricao: e.descricao || '',
+                  is_video: !!e.is_video,
+                  nome_arquivo: e.nome_arquivo
+                }))
+              : []
+          )
+          setEvidenciasParaExcluir([])
+          setNovasEvidencias([])
           setFormData({
             titulo: data.titulo || '',
             descricao_problema: data.descricao_problema || '',
@@ -144,7 +196,135 @@ function EditarBoaPraticaPage() {
     }
 
     loadData()
-  }, [params?.id])
+  }, [praticaId])
+
+  useEffect(() => {
+    if (evidenciaTipo === 'imagem') {
+      setEvidenciaUrl('')
+    } else {
+      setEvidenciaFile(null)
+    }
+  }, [evidenciaTipo])
+
+  const resetEvidenciaForm = () => {
+    setEvidenciaFile(null)
+    setEvidenciaUrl('')
+    setEvidenciaCategoria('antes')
+    setEvidenciaDescricao('')
+    setEvidenciaTipo('imagem')
+  }
+
+  const addEvidencia = () => {
+    if (evidenciaTipo === 'imagem') {
+      if (!evidenciaFile) {
+        toast.error('Selecione uma imagem')
+        return
+      }
+      if (evidenciaFile.size > 10 * 1024 * 1024) {
+        toast.error('Cada imagem deve ter no maximo 10MB')
+        return
+      }
+      if (!ALLOWED_EVIDENCIA_MIME_TYPES.includes(evidenciaFile.type)) {
+        toast.error('Formato nao suportado. Use JPEG, PNG, GIF ou WEBP')
+        return
+      }
+    } else if (!evidenciaUrl) {
+      toast.error('Informe a URL do video')
+      return
+    }
+
+    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`
+    setNovasEvidencias((prev) => [
+      ...prev,
+      {
+        id,
+        is_video: evidenciaTipo === 'video',
+        file: evidenciaTipo === 'imagem' ? evidenciaFile ?? undefined : undefined,
+        url: evidenciaTipo === 'video' ? evidenciaUrl : undefined,
+        categoria: evidenciaCategoria,
+        descricao: evidenciaDescricao,
+        previewUrl: evidenciaTipo === 'imagem' && evidenciaFile ? URL.createObjectURL(evidenciaFile) : undefined
+      }
+    ])
+
+    resetEvidenciaForm()
+  }
+
+  const marcarExclusaoEvidenciaExistente = (id: string) => {
+    setEvidenciasParaExcluir((prev) => (prev.includes(id) ? prev : [...prev, id]))
+  }
+
+  const restaurarEvidenciaExistente = (id: string) => {
+    setEvidenciasParaExcluir((prev) => prev.filter((item) => item !== id))
+  }
+
+  const removerNovaEvidencia = (id: string) => {
+    setNovasEvidencias((prev) => prev.filter((ev) => ev.id !== id))
+  }
+
+  const evidenciaMarcadaParaExclusao = (id: string) => evidenciasParaExcluir.includes(id)
+
+  const getEvidenciaTitulo = (evidencia: { nome_arquivo?: string; url?: string; is_video: boolean }) => {
+    if (evidencia.is_video) return 'Video'
+    return evidencia.nome_arquivo || evidencia.url?.split('/').pop() || 'evidencia'
+  }
+
+  const uploadNovasEvidencias = async () => {
+    if (!praticaId) {
+      throw new Error('ID da boa pratica nao encontrado')
+    }
+
+    for (const ev of novasEvidencias) {
+      if (ev.is_video) {
+        const response = await fetch(`/api/boas-praticas/${praticaId}/evidencias`, {
+          method: 'POST',
+          body: JSON.stringify({
+            url: ev.url,
+            categoria: ev.categoria,
+            descricao: ev.descricao,
+            is_video: true
+          })
+        })
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => null)
+          throw new Error(err?.error || err?.message || 'Erro ao enviar evidencia de video')
+        }
+      } else if (ev.file) {
+        const formDataUpload = new FormData()
+        formDataUpload.append('file', ev.file)
+        formDataUpload.append('categoria', ev.categoria)
+        formDataUpload.append('descricao', ev.descricao || '')
+
+        const response = await fetch(`/api/boas-praticas/${praticaId}/evidencias`, {
+          method: 'POST',
+          body: formDataUpload
+        })
+
+        if (!response.ok) {
+          const err = await response.json().catch(() => null)
+          throw new Error(err?.error || err?.message || 'Erro ao enviar evidencia')
+        }
+      }
+    }
+  }
+
+  const excluirEvidenciasMarcadas = async () => {
+    if (!praticaId) {
+      throw new Error('ID da boa pratica nao encontrado')
+    }
+
+    for (const evidenciaId of evidenciasParaExcluir) {
+      const response = await fetch(`/api/boas-praticas/${praticaId}/evidencias/${evidenciaId}`, {
+        method: 'DELETE'
+      })
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => null)
+        throw new Error(err?.error || err?.message || 'Erro ao excluir evidencia')
+      }
+    }
+  }
 
   const filteredTags = tagsCatalogo.filter(tag =>
     tag.nome?.toLowerCase().includes(tagSearch.toLowerCase())
@@ -265,7 +445,7 @@ function EditarBoaPraticaPage() {
     e.preventDefault()
     setSaving(true)
 
-    if (!params?.id) {
+    if (!praticaId) {
       setSaving(false)
       toast.error('ID de autenticacao nao encontrado')
       return
@@ -278,7 +458,7 @@ function EditarBoaPraticaPage() {
     }
 
     try {
-      const res = await fetch(`/api/boas-praticas/${params.id}`, {
+      const res = await fetch(`/api/boas-praticas/${praticaId}`, {
         method: 'PUT',
         body: JSON.stringify({
           ...formData,
@@ -300,7 +480,7 @@ function EditarBoaPraticaPage() {
         const uploadForm = new FormData()
         uploadForm.append('file', projetoFile)
 
-        const uploadRes = await fetch(`/api/boas-praticas/${params.id}/projeto`, {
+        const uploadRes = await fetch(`/api/boas-praticas/${praticaId}/projeto`, {
           method: 'POST',
           body: uploadForm
         })
@@ -311,8 +491,16 @@ function EditarBoaPraticaPage() {
         }
       }
 
+      if (evidenciasParaExcluir.length > 0) {
+        await excluirEvidenciasMarcadas()
+      }
+
+      if (novasEvidencias.length > 0) {
+        await uploadNovasEvidencias()
+      }
+
       toast.success('Boa pratica atualizada com sucesso!')
-      router.push(`/boas-praticas/${params.id}`)
+      router.push(`/boas-praticas/${praticaId}`)
     } catch (_error) {
       toast.error(_error instanceof Error ? _error.message : 'Erro ao salvar boa pratica')
     } finally {
@@ -334,7 +522,7 @@ function EditarBoaPraticaPage() {
         <div className="flex items-center space-x-4">
           <Button
             variant="ghost"
-            onClick={() => router.push(`/boas-praticas/${params?.id}`)}
+            onClick={() => praticaId && router.push(`/boas-praticas/${praticaId}`)}
             className="p-2"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -624,6 +812,196 @@ function EditarBoaPraticaPage() {
             </CardContent>
           </Card>
 
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                Evidencias
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-3">
+                <div className="text-sm font-medium text-gray-700">Evidencias atuais</div>
+                {evidenciasExistentes.length === 0 ? (
+                  <div className="text-sm text-gray-500">Nenhuma evidencia cadastrada</div>
+                ) : (
+                  <div className="space-y-3">
+                    {evidenciasExistentes.map((ev) => {
+                      const marcada = evidenciaMarcadaParaExclusao(ev.id)
+                      return (
+                        <div
+                          key={ev.id}
+                          className={`flex items-center justify-between border rounded-md px-3 py-2 ${marcada ? 'border-red-300 bg-red-50 opacity-60' : ''}`}
+                        >
+                          <div className="flex items-center gap-3">
+                            {!ev.is_video && ev.url && (
+                              <img src={ev.url} alt="preview" className="w-16 h-16 object-cover rounded" />
+                            )}
+                            {ev.is_video && (
+                              <div className="flex items-center gap-2 text-sm text-blue-600">
+                                <Video className="w-4 h-4" />
+                                <span>Video</span>
+                              </div>
+                            )}
+                            <div className="flex flex-col text-sm">
+                              <span className="font-medium capitalize">{ev.categoria}</span>
+                              <span className="text-gray-700">{getEvidenciaTitulo(ev)}</span>
+                              {ev.descricao && <span className="text-gray-600">{ev.descricao}</span>}
+                              <a href={ev.url} className="text-blue-600 underline" target="_blank" rel="noreferrer">
+                                Abrir evidencia
+                              </a>
+                              {marcada && <span className="text-red-600">Marcada para exclusao ao salvar</span>}
+                            </div>
+                          </div>
+                          {marcada ? (
+                            <Button type="button" variant="outline" size="sm" onClick={() => restaurarEvidenciaExistente(ev.id)}>
+                              Restaurar
+                            </Button>
+                          ) : (
+                            <Button type="button" variant="outline" size="sm" onClick={() => marcarExclusaoEvidenciaExistente(ev.id)}>
+                              <Trash2 className="w-4 h-4 mr-1" />
+                              Excluir
+                            </Button>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t pt-4 space-y-4">
+                <div className="text-sm font-medium text-gray-700">Adicionar novas evidencias</div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">Tipo</label>
+                    <div className="flex gap-2">
+                      <Button
+                        type="button"
+                        variant={evidenciaTipo === 'imagem' ? 'default' : 'outline'}
+                        onClick={() => setEvidenciaTipo('imagem')}
+                      >
+                        Imagem
+                      </Button>
+                      <Button
+                        type="button"
+                        variant={evidenciaTipo === 'video' ? 'default' : 'outline'}
+                        onClick={() => setEvidenciaTipo('video')}
+                      >
+                        <Video className="w-4 h-4 mr-1" />
+                        Video
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">Categoria</label>
+                    <select
+                      value={evidenciaCategoria}
+                      onChange={(e) => setEvidenciaCategoria(e.target.value as 'antes' | 'depois')}
+                      className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                    >
+                      <option value="antes">Antes</option>
+                      <option value="depois">Depois</option>
+                    </select>
+                  </div>
+                </div>
+
+                {evidenciaTipo === 'imagem' ? (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">Imagem (max 10MB)</label>
+                    <Input
+                      key="editar-evidencia-imagem"
+                      type="file"
+                      accept="image/jpeg,image/png,image/gif,image/webp"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0] || null
+                        if (!file) {
+                          setEvidenciaFile(null)
+                          return
+                        }
+                        if (!ALLOWED_EVIDENCIA_MIME_TYPES.includes(file.type)) {
+                          toast.error('Formato nao suportado. Use JPEG, PNG, GIF ou WEBP')
+                          e.target.value = ''
+                          setEvidenciaFile(null)
+                          return
+                        }
+                        if (file.size > 10 * 1024 * 1024) {
+                          toast.error('Cada imagem deve ter no maximo 10MB')
+                          e.target.value = ''
+                          setEvidenciaFile(null)
+                          return
+                        }
+                        setEvidenciaFile(file)
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-medium text-gray-700">URL do video</label>
+                    <Input
+                      key="editar-evidencia-video"
+                      placeholder="https://"
+                      value={evidenciaUrl}
+                      onChange={(e) => setEvidenciaUrl(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Descricao</label>
+                  <Textarea
+                    value={evidenciaDescricao}
+                    onChange={(e) => setEvidenciaDescricao(e.target.value)}
+                    placeholder="Descricao da evidencia"
+                    rows={2}
+                  />
+                </div>
+
+                <Button type="button" onClick={addEvidencia}>
+                  <Plus className="w-4 h-4 mr-2" />
+                  Adicionar Evidencia
+                </Button>
+
+                {novasEvidencias.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="text-sm font-medium text-gray-700">Novas evidencias pendentes</div>
+                    {novasEvidencias.map((ev) => (
+                      <div key={ev.id} className="flex items-center justify-between border rounded-md px-3 py-2">
+                        <div className="flex items-center gap-3">
+                          {!ev.is_video && ev.previewUrl && (
+                            <img src={ev.previewUrl} alt="preview" className="w-16 h-16 object-cover rounded" />
+                          )}
+                          {ev.is_video && (
+                            <div className="flex items-center gap-2 text-sm text-blue-600">
+                              <Video className="w-4 h-4" />
+                              <span>Video</span>
+                            </div>
+                          )}
+                          <div className="flex flex-col text-sm">
+                            <span className="font-medium capitalize">{ev.categoria}</span>
+                            {ev.file && <span className="text-gray-700">{ev.file.name}</span>}
+                            {ev.descricao && <span className="text-gray-600">{ev.descricao}</span>}
+                            {ev.is_video && ev.url && (
+                              <a href={ev.url} className="text-blue-600 underline" target="_blank" rel="noreferrer">
+                                Abrir video
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                        <Button type="button" variant="outline" size="sm" onClick={() => removerNovaEvidencia(ev.id)}>
+                          <Trash2 className="w-4 h-4 mr-1" />
+                          Remover
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Resultados e Tags */}
           <Card>
             <CardHeader>
@@ -727,7 +1105,7 @@ function EditarBoaPraticaPage() {
             <Button
               type="button"
               variant="outline"
-              onClick={() => router.push(`/boas-praticas/${params?.id}`)}
+              onClick={() => praticaId && router.push(`/boas-praticas/${praticaId}`)}
             >
               <ArrowLeft className="w-4 h-4 mr-2" />
               Cancelar

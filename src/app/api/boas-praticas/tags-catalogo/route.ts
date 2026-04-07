@@ -1,34 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import { verifyJWTToken } from '@/lib/jwt-middleware';
-import { userHasFunctionality } from '@/lib/permissions-server';
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
-
-const BOASPRATICAS_GESTAO_GERAL_SLUG = 'boaspraticas-gestao-geral';
-
-async function ensureGestaoGeralAccess(request: NextRequest) {
-  const authResult = await verifyJWTToken(request);
-  if (!authResult.success) {
-    return {
-      authorized: false as const,
-      response: NextResponse.json({ error: authResult.error }, { status: 401 })
-    };
-  }
-
-  const allowed = await userHasFunctionality(authResult.user!, BOASPRATICAS_GESTAO_GERAL_SLUG);
-  if (!allowed) {
-    return {
-      authorized: false as const,
-      response: NextResponse.json({ error: 'Acesso negado' }, { status: 403 })
-    };
-  }
-
-  return { authorized: true as const };
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -79,8 +56,10 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const access = await ensureGestaoGeralAccess(request);
-    if (!access.authorized) return access.response;
+    const authResult = await verifyJWTToken(request);
+    if (!authResult.success) {
+      return NextResponse.json({ error: authResult.error }, { status: 401 });
+    }
 
     const body = await request.json();
     const { nome, descricao, cor } = body;
