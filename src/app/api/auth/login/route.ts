@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import bcrypt from 'bcrypt'
 import jwt from 'jsonwebtoken'
+import { isFirstAccessPassword } from '@/lib/first-access'
 
 const supabaseUrl = process.env.SUPABASE_URL!
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
@@ -17,55 +18,54 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey, {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    console.log('Raw request body:', body)
-    
-    // Aceitar tanto 'email' quanto 'identifier' para compatibilidade
-    const email = body.email || body.identifier
+    const identifier = body.email || body.identifier
     const password = body.password
 
-
-    if (!email || !password) {
-      console.log('Missing credentials - email:', !!email, 'password:', !!password)
+    if (!identifier) {
       return NextResponse.json(
-        { success: false, message: 'Email e senha são obrigatórios' },
+        { success: false, message: 'Email ou matricula e obrigatorio' },
         { status: 400 }
       )
     }
 
-    // Buscar usuário no banco
-    console.log('Searching for user with email:', email)
     const { data: user, error } = await supabase
       .from('usuarios')
       .select('*')
-      .or(`email.eq.${email}, matricula.eq.${email}`)
+      .or(`email.eq.${identifier}, matricula.eq.${identifier}`)
       .eq('status', 'ativo')
       .single()
 
-
-
     if (error || !user) {
-      console.log('User not found or database error:', error)
       return NextResponse.json(
-        { success: false, message: 'Credenciais inválidas' },
+        { success: false, message: 'Credenciais invalidas' },
         { status: 401 }
       )
     }
 
-    // Verificar senha    
+    if (isFirstAccessPassword(user.password_hash)) {
+      return NextResponse.json({
+        success: false,
+        requiresFirstAccess: true,
+        matricula: user.matricula,
+        message: 'Primeiro acesso detectado. Confirme seus dados para cadastrar uma nova senha.'
+      })
+    }
+
+    if (!password) {
+      return NextResponse.json(
+        { success: false, message: 'Email e senha sao obrigatorios' },
+        { status: 400 }
+      )
+    }
+
     const isValidPassword = await bcrypt.compare(password, user.password_hash)
-    console.log('- Password comparison result:', isValidPassword)
-
     if (!isValidPassword) {
-      console.log('Password comparison failed')
       return NextResponse.json(
-        { success: false, message: 'Credenciais inválidas' },
+        { success: false, message: 'Credenciais invalidas' },
         { status: 401 }
       )
     }
 
-    console.log('Password verified successfully, generating JWT token...')
-
-    // Gerar token JWT
     const token = jwt.sign(
       {
         matricula: user.matricula,
@@ -79,9 +79,6 @@ export async function POST(request: NextRequest) {
       jwtSecret,
       { expiresIn: '24h' }
     )
-
-    console.log('JWT token generated successfully')
-    console.log('Login successful for user:', user.email)
 
     const response = NextResponse.json({
       success: true,
@@ -102,15 +99,12 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       path: '/',
-      maxAge: 60 * 60 * 24 // 24 horas
+      maxAge: 60 * 60 * 24
     })
 
     return response
-
   } catch (error) {
-    console.error('=== LOGIN ERROR ===')
     console.error('Login API error:', error)
-    console.error('Error stack:', error instanceof Error ? error.stack : 'No stack trace')
     return NextResponse.json(
       { success: false, message: 'Erro interno do servidor' },
       { status: 500 }

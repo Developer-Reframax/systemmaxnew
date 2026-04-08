@@ -12,34 +12,42 @@ const supabase = createClient(supabaseUrl, supabaseServiceKey)
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { 
-      nome, 
-      email, 
-      matricula, 
-      senha, 
-      role, 
-      funcao, 
+    const {
+      nome,
+      email,
+      matricula,
+      senha,
+      role,
+      funcao,
       contrato_raiz,
       phone,
-      aceite_termos 
+      aceite_termos,
+      letra_id,
+      equipe_id,
+      first_access_mode
     } = body
 
-    // Validações básicas
-    if (!nome || !email || !matricula || !senha) {
+    if (!nome || !email || !matricula) {
       return NextResponse.json(
-        { success: false, message: 'Campos obrigatórios não preenchidos' },
+        { success: false, message: 'Campos obrigatorios nao preenchidos' },
+        { status: 400 }
+      )
+    }
+
+    if (!first_access_mode && !senha) {
+      return NextResponse.json(
+        { success: false, message: 'Senha e obrigatoria quando o primeiro acesso nao estiver habilitado' },
         { status: 400 }
       )
     }
 
     if (!aceite_termos) {
       return NextResponse.json(
-        { success: false, message: 'É necessário aceitar os termos de uso' },
+        { success: false, message: 'E necessario aceitar os termos de uso' },
         { status: 400 }
       )
     }
 
-    // Verificar se usuário já existe
     const { data: existingUser } = await supabase
       .from('usuarios')
       .select('matricula, email')
@@ -48,16 +56,17 @@ export async function POST(request: NextRequest) {
 
     if (existingUser) {
       return NextResponse.json(
-        { success: false, message: 'Usuário já existe com esta matrícula ou email' },
+        { success: false, message: 'Usuario ja existe com esta matricula ou email' },
         { status: 409 }
       )
     }
 
-    // Hash da senha
-    const saltRounds = 12
-    const hashedPassword = await bcrypt.hash(senha, saltRounds)
+    let hashedPassword: string | null = null
+    if (!first_access_mode) {
+      const saltRounds = 12
+      hashedPassword = await bcrypt.hash(senha, saltRounds)
+    }
 
-    // Criar usuário usando service_role_key (bypassa RLS)
     const { data: newUser, error } = await supabase
       .from('usuarios')
       .insert({
@@ -69,6 +78,8 @@ export async function POST(request: NextRequest) {
         funcao: funcao || 'Geral',
         contrato_raiz: contrato_raiz || null,
         phone,
+        letra_id: letra_id || null,
+        equipe_id: equipe_id || null,
         status: 'ativo',
         termos: aceite_termos
       })
@@ -76,16 +87,15 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) {
-      console.error('Erro ao criar usuário:', error)
+      console.error('Erro ao criar usuario:', error)
       return NextResponse.json(
-        { success: false, message: 'Erro ao criar usuário' },
+        { success: false, message: 'Erro ao criar usuario' },
         { status: 500 }
       )
     }
 
-    // Gerar JWT token
     const token = jwt.sign(
-      { 
+      {
         matricula: newUser.matricula,
         nome: newUser.nome,
         email: newUser.email,
@@ -95,7 +105,6 @@ export async function POST(request: NextRequest) {
       { expiresIn: '24h' }
     )
 
-    // Criar sessão inicial
     await supabase
       .from('sessoes')
       .insert({
@@ -107,7 +116,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      message: 'Usuário criado com sucesso',
+      message: 'Usuario criado com sucesso',
       token,
       user: {
         matricula: newUser.matricula,
@@ -118,7 +127,6 @@ export async function POST(request: NextRequest) {
         status: newUser.status
       }
     })
-
   } catch (error) {
     console.error('Register API error:', error)
     return NextResponse.json(

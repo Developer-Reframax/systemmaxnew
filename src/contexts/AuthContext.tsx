@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from 'react'
 import type { AuthUser } from '@/lib/auth'
-import type { AuthContextType, AuthProviderProps } from '@/lib/types/auth'
+import type { AuthContextType, AuthProviderProps, LoginResult } from '@/lib/types/auth'
 import { hasRole, isAuthenticated, checkVerificationComplete } from '@/lib/auth-utils'
 import { useVerification } from '@/hooks/useVerification'
 import TermsModal from '@/components/TermsModal'
@@ -72,7 +72,29 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
     void initAuth()
   }, [initialUser, startVerification])
 
-  const login = async (identifier: string, password: string) => {
+  const finalizeAuthenticatedSession = async (data: LoginResult) => {
+    if (!data.user) {
+      return data
+    }
+
+    setUser(data.user)
+
+    const currentPath =
+      typeof window !== 'undefined'
+        ? window.location.pathname + window.location.search
+        : '/'
+
+    await startUserSession(currentPath)
+    startVerification()
+
+    return {
+      success: true,
+      user: data.user,
+      message: data.message
+    } satisfies LoginResult
+  }
+
+  const login = async (identifier: string, password: string): Promise<LoginResult> => {
     try {
       setLoading(true)
 
@@ -81,27 +103,69 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ email: identifier, password })
+        body: JSON.stringify({ identifier, password })
       })
 
       const data = await response.json()
 
+      if (response.ok && data.requiresFirstAccess) {
+        return {
+          success: false,
+          requiresFirstAccess: true,
+          matricula: data.matricula,
+          message: data.message
+        }
+      }
+
       if (response.ok && data.success && data.user) {
-        setUser(data.user)
-
-        const currentPath =
-          typeof window !== 'undefined'
-            ? window.location.pathname + window.location.search
-            : '/'
-        await startUserSession(currentPath)
-
-        startVerification()
-        return { success: true, message: data.message }
+        return await finalizeAuthenticatedSession({
+          success: true,
+          user: data.user,
+          message: data.message
+        })
       }
 
       return { success: false, message: data.message || 'Erro no login' }
     } catch (error) {
       console.error('Erro no login:', error)
+      return { success: false, message: 'Erro interno do servidor' }
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const completeFirstAccess = async (
+    verificationToken: string,
+    newPassword: string,
+    confirmPassword: string
+  ): Promise<LoginResult> => {
+    try {
+      setLoading(true)
+
+      const response = await fetch('/api/auth/first-access/complete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ verificationToken, newPassword, confirmPassword })
+      })
+
+      const data = await response.json()
+
+      if (response.ok && data.success && data.user) {
+        return await finalizeAuthenticatedSession({
+          success: true,
+          user: data.user,
+          message: data.message
+        })
+      }
+
+      return {
+        success: false,
+        message: data.message || 'Erro ao concluir o primeiro acesso'
+      }
+    } catch (error) {
+      console.error('Erro ao concluir primeiro acesso:', error)
       return { success: false, message: 'Erro interno do servidor' }
     } finally {
       setLoading(false)
@@ -124,6 +188,7 @@ export function AuthProvider({ children, initialUser = null }: AuthProviderProps
     user,
     loading: loading || verificationLoading,
     login,
+    completeFirstAccess,
     logout,
     isAuthenticated: isAuthenticated(user),
     hasRole: (roles: string | string[]) => hasRole(user, roles),

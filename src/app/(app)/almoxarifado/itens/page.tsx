@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Package, Plus, Edit, Trash2, Search, Upload, X, Save, AlertTriangle } from 'lucide-react'
+import { Package, Plus, Edit, Trash2, Search, Upload, X, Save, AlertTriangle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -34,23 +34,36 @@ interface ItemForm {
   ativo: boolean
 }
 
+interface ItemsResponse {
+  success: boolean
+  data: Item[]
+  pagination?: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
+const ITEMS_PER_PAGE = 20
+
 const CATEGORIAS = [
   'Ferramentas',
-  'EPI - Equipamentos de Proteção Individual',
-  'Materiais de Escritório',
+  'EPI - Equipamentos de ProteÃ§Ã£o Individual',
+  'Materiais de EscritÃ³rio',
   'Materiais de Limpeza',
-  'Materiais Elétricos',
-  'Materiais Hidráulicos',
+  'Materiais ElÃ©tricos',
+  'Materiais HidrÃ¡ulicos',
   'Outros'
 ]
 
 const UNIDADES_MEDIDA = [
   'UN - Unidade',
-  'PC - Peça',
+  'PC - PeÃ§a',
   'KG - Quilograma',
   'L - Litro',
   'M - Metro',
-  'M² - Metro Quadrado',
+  'MÂ² - Metro Quadrado',
   'CX - Caixa',
   'PCT - Pacote'
 ]
@@ -69,6 +82,9 @@ function GerenciamentoItens() {
   const [stockFilter, setStockFilter] = useState<'todos' | 'baixo' | 'zerado'>('todos')
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
 
   const [formData, setFormData] = useState<ItemForm>({
     nome: '',
@@ -82,43 +98,60 @@ function GerenciamentoItens() {
     ativo: true
   })
 
-  const loadItems = useCallback(async () => {
+  const loadItems = useCallback(async (pageToLoad = currentPage) => {
     try {
-      const response = await fetch('/api/almoxarifado/itens', {
+      setLoading(true)
+
+      const params = new URLSearchParams({
+        page: pageToLoad.toString(),
+        limit: ITEMS_PER_PAGE.toString()
+      })
+
+      if (searchTerm) params.append('search', searchTerm)
+      if (categoryFilter) params.append('categoria', categoryFilter)
+      if (statusFilter !== 'todos') params.append('status', statusFilter)
+      if (stockFilter !== 'todos') params.append('estoque', stockFilter)
+
+      const response = await fetch(`/api/almoxarifado/itens?${params.toString()}`, {
         method: 'GET'
       })
 
       if (response.ok) {
-        const result = await response.json()
-        
-        // A API retorna um objeto com { success: true, data: [...], pagination: {...} }
+        const result: ItemsResponse = await response.json()
+
         if (result.success && Array.isArray(result.data)) {
           setItems(result.data)
+          setTotalItems(result.pagination?.total ?? result.data.length)
+          setTotalPages(result.pagination?.totalPages ?? 1)
         } else {
-          console.error('API retornou dados em formato inválido:', result)
-          setItems([]) // Definir como array vazio para evitar erros
+          console.error('API retornou dados em formato invÃ¡lido:', result)
+          setItems([])
+          setTotalItems(0)
+          setTotalPages(1)
         }
       } else if (response.status === 403) {
-        toast.error('Você não tem permissão para acessar esta página')
+        toast.error('VocÃª nÃ£o tem permissÃ£o para acessar esta pÃ¡gina')
         router.push('/almoxarifado')
       } else {
         toast.error('Erro ao carregar itens')
-        setItems([]) // Garantir que items seja um array mesmo em caso de erro
+        setItems([])
+        setTotalItems(0)
+        setTotalPages(1)
       }
     } catch (error) {
       console.error('Erro ao carregar itens:', error)
       toast.error('Erro interno do servidor')
-      setItems([]) // Garantir que items seja um array mesmo em caso de erro
+      setItems([])
+      setTotalItems(0)
+      setTotalPages(1)
     } finally {
       setLoading(false)
     }
-  }, [router])
+  }, [categoryFilter, currentPage, router, searchTerm, statusFilter, stockFilter])
 
   useEffect(() => {
     loadItems()
   }, [loadItems])
-
-
 
   const openModal = (item?: Item) => {
     if (item) {
@@ -166,15 +199,15 @@ function GerenciamentoItens() {
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (file) {
-      if (file.size > 5 * 1024 * 1024) { // 5MB limit
-        toast.error('Imagem deve ter no máximo 5MB')
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error('Imagem deve ter no mÃ¡ximo 5MB')
         return
       }
 
       setImageFile(file)
       const reader = new FileReader()
-      reader.onload = (e) => {
-        setImagePreview(e.target?.result as string)
+      reader.onload = (event) => {
+        setImagePreview(event.target?.result as string)
       }
       reader.readAsDataURL(file)
     }
@@ -187,21 +220,19 @@ function GerenciamentoItens() {
     try {
       const formDataToSend = new FormData()
       const contrato = formData.contrato || user?.contrato_raiz || ''
-      
-      // Adicionar dados do formulário
+
       Object.entries({ ...formData, contrato }).forEach(([key, value]) => {
         formDataToSend.append(key, value.toString())
       })
 
-      // Adicionar imagem se houver
       if (imageFile) {
         formDataToSend.append('image', imageFile)
       }
 
-      const url = editingItem 
+      const url = editingItem
         ? `/api/almoxarifado/itens/${editingItem.id}`
         : '/api/almoxarifado/itens'
-      
+
       const method = editingItem ? 'PUT' : 'POST'
 
       const response = await fetch(url, {
@@ -213,18 +244,8 @@ function GerenciamentoItens() {
       })
 
       if (response.ok) {
-        const savedItem = await response.json()
-        
-        if (editingItem) {
-          setItems(prev => prev.map(item => 
-            item.id === editingItem.id ? savedItem.data : item
-          ))
-          toast.success('Item atualizado com sucesso!')
-        } else {
-          setItems(prev => [savedItem.data, ...prev])
-          toast.success('Item criado com sucesso!')
-        }
-        
+        await loadItems(currentPage)
+        toast.success(editingItem ? 'Item atualizado com sucesso!' : 'Item criado com sucesso!')
         closeModal()
       } else {
         const error = await response.json()
@@ -252,8 +273,15 @@ function GerenciamentoItens() {
       })
 
       if (response.ok) {
-        setItems(prev => prev.filter(i => i.id !== item.id))
-        toast.success('Item excluído com sucesso!')
+        const nextPage = items.length === 1 && currentPage > 1 ? currentPage - 1 : currentPage
+
+        if (nextPage !== currentPage) {
+          setCurrentPage(nextPage)
+        } else {
+          await loadItems(nextPage)
+        }
+
+        toast.success('Item excluÃ­do com sucesso!')
       } else {
         const error = await response.json()
         toast.error(error.message || 'Erro ao excluir item')
@@ -265,12 +293,11 @@ function GerenciamentoItens() {
   }
 
   const getStockStatus = (item: Item) => {
-    // Validações defensivas para evitar erros
     if (!item || typeof item !== 'object') return 'normal'
-    
+
     const estoqueAtual = typeof item.estoque_atual === 'number' ? item.estoque_atual : 0
     const estoqueMinimo = typeof item.estoque_minimo === 'number' ? item.estoque_minimo : 0
-    
+
     if (estoqueAtual === 0) return 'zerado'
     if (estoqueAtual <= estoqueMinimo) return 'baixo'
     return 'normal'
@@ -278,65 +305,58 @@ function GerenciamentoItens() {
 
   const getStockStatusColor = (status: string) => {
     switch (status) {
-      case 'zerado': return 'text-red-600 bg-red-100'
-      case 'baixo': return 'text-yellow-600 bg-yellow-100'
-      default: return 'text-green-600 bg-green-100'
+      case 'zerado':
+        return 'text-red-600 bg-red-100'
+      case 'baixo':
+        return 'text-yellow-600 bg-yellow-100'
+      default:
+        return 'text-green-600 bg-green-100'
     }
   }
 
   const getStockStatusText = (status: string) => {
     switch (status) {
-      case 'zerado': return 'Zerado'
-      case 'baixo': return 'Estoque Baixo'
-      default: return 'Normal'
+      case 'zerado':
+        return 'Zerado'
+      case 'baixo':
+        return 'Estoque Baixo'
+      default:
+        return 'Normal'
     }
   }
 
-  const filteredItems = items.filter(item => {
-    // Validações defensivas para evitar erros com propriedades undefined
-    if (!item || typeof item !== 'object') return false
-    
-    const itemNome = item.nome || ''
-    const itemDescricao = item.descricao || ''
-    const itemCategoria = item.categoria || ''
-    
-    const matchesSearch = itemNome.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         itemDescricao.toLowerCase().includes(searchTerm.toLowerCase())
-    
-    const matchesCategory = !categoryFilter || itemCategoria === categoryFilter
-    
-    const matchesStatus = statusFilter === 'todos' || 
-                         (statusFilter === 'ativo' && item.ativo) ||
-                         (statusFilter === 'inativo' && !item.ativo)
-    
-    const stockStatus = getStockStatus(item)
-    const matchesStock = stockFilter === 'todos' ||
-                        (stockFilter === 'baixo' && stockStatus === 'baixo') ||
-                        (stockFilter === 'zerado' && stockStatus === 'zerado')
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
+    }
+  }
 
-    return matchesSearch && matchesCategory && matchesStatus && matchesStock
-  })
+  const hasActiveFilters = Boolean(
+    searchTerm ||
+    categoryFilter ||
+    statusFilter !== 'todos' ||
+    stockFilter !== 'todos'
+  )
+
+  const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1
+  const pageEnd = Math.min(currentPage * ITEMS_PER_PAGE, totalItems)
 
   if (loading || authLoading) {
     return (
-      
-        <div className="min-h-screen bg-gray-50 p-6">
-          <div className="max-w-6xl mx-auto">
-            <div className="bg-white rounded-lg shadow-sm p-8 text-center">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-              <p className="text-gray-600">Carregando itens...</p>
-            </div>
+      <div className="min-h-screen bg-gray-50 p-6">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-lg shadow-sm p-8 text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <p className="text-gray-600">Carregando itens...</p>
           </div>
         </div>
-      
+      </div>
     )
   }
 
   return (
-    
-      <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-6xl mx-auto">
-        {/* Header */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-3">
@@ -344,7 +364,7 @@ function GerenciamentoItens() {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Gerenciamento de Itens</h1>
                 <p className="text-gray-600">
-                  {items.length} itens cadastrados • {items.filter(i => getStockStatus(i) === 'baixo').length} com estoque baixo
+                  {totalItems} itens encontrados â€¢ pÃ¡gina {currentPage} de {Math.max(totalPages, 1)}
                 </p>
               </div>
             </div>
@@ -358,7 +378,6 @@ function GerenciamentoItens() {
           </div>
         </div>
 
-        {/* Filtros */}
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div className="relative">
@@ -367,14 +386,20 @@ function GerenciamentoItens() {
                 type="text"
                 placeholder="Buscar itens..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value)
+                  setCurrentPage(1)
+                }}
                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
             </div>
 
             <select
               value={categoryFilter}
-              onChange={(e) => setCategoryFilter(e.target.value)}
+              onChange={(e) => {
+                setCategoryFilter(e.target.value)
+                setCurrentPage(1)
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="">Todas as categorias</option>
@@ -385,7 +410,10 @@ function GerenciamentoItens() {
 
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as 'todos' | 'ativo' | 'inativo')}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as 'todos' | 'ativo' | 'inativo')
+                setCurrentPage(1)
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="todos">Todos os status</option>
@@ -395,7 +423,10 @@ function GerenciamentoItens() {
 
             <select
               value={stockFilter}
-              onChange={(e) => setStockFilter(e.target.value as 'todos' | 'baixo' | 'zerado')}
+              onChange={(e) => {
+                setStockFilter(e.target.value as 'todos' | 'baixo' | 'zerado')
+                setCurrentPage(1)
+              }}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             >
               <option value="todos">Todos os estoques</option>
@@ -405,97 +436,153 @@ function GerenciamentoItens() {
           </div>
         </div>
 
-        {/* Lista de Itens */}
-        {filteredItems.length === 0 ? (
+        {items.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-8 text-center">
             <Package className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">Nenhum item encontrado</h2>
             <p className="text-gray-600">
-              {items.length === 0 
-                ? 'Comece criando seu primeiro item'
-                : 'Tente ajustar os filtros de busca'
-              }
+              {hasActiveFilters ? 'Tente ajustar os filtros de busca' : 'Comece criando seu primeiro item'}
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredItems.map((item) => {
-              const stockStatus = getStockStatus(item)
-              return (
-                <div key={item.id} className="bg-white rounded-lg shadow-sm p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
-                      {item.imagem_url ? (
-                        <img
-                          src={item.imagem_url}
-                          alt={item.nome}
-                          className="w-full h-full object-cover rounded-lg"
-                        />
-                      ) : (
-                        <Package className="h-8 w-8 text-gray-400" />
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {items.map((item) => {
+                const stockStatus = getStockStatus(item)
+                return (
+                  <div key={item.id} className="bg-white rounded-lg shadow-sm p-6">
+                    <div className="flex items-start justify-between mb-4">
+                      <div className="w-16 h-16 bg-gray-200 rounded-lg flex items-center justify-center flex-shrink-0">
+                        {item.imagem_url ? (
+                          <img
+                            src={item.imagem_url}
+                            alt={item.nome}
+                            className="w-full h-full object-cover rounded-lg"
+                          />
+                        ) : (
+                          <Package className="h-8 w-8 text-gray-400" />
+                        )}
+                      </div>
+                      <div className="flex items-center space-x-2 ml-4">
+                        <button
+                          onClick={() => openModal(item)}
+                          className="text-blue-600 hover:text-blue-700 p-1"
+                          title="Editar"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(item)}
+                          className="text-red-600 hover:text-red-700 p-1"
+                          title="Excluir"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mb-4">
+                      <h3 className="font-semibold text-gray-900 mb-1">{item.nome}</h3>
+                      <p className="text-sm text-gray-600 mb-2">{item.descricao}</p>
+                      <span className="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">
+                        {item.categoria}
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 mb-4">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Estoque atual:</span>
+                        <span className="font-medium">{item.estoque_atual} {item.unidade_medida}</span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-gray-500">Estoque mÃ­nimo:</span>
+                        <span className="font-medium">{item.estoque_minimo} {item.unidade_medida}</span>
+                      </div>
+                      {item.preco_unitario && (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-gray-500">PreÃ§o unitÃ¡rio:</span>
+                          <span className="font-medium">R$ {item.preco_unitario.toFixed(2)}</span>
+                        </div>
                       )}
                     </div>
-                    <div className="flex items-center space-x-2 ml-4">
+
+                    <div className="flex items-center justify-between">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStockStatusColor(stockStatus)}`}>
+                        {stockStatus === 'baixo' && <AlertTriangle className="h-3 w-3 mr-1" />}
+                        {getStockStatusText(stockStatus)}
+                      </span>
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        item.ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
+                      }`}>
+                        {item.ativo ? 'Ativo' : 'Inativo'}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            {totalPages > 1 && (
+              <div className="bg-white rounded-lg shadow-sm p-4 mt-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <p className="text-sm text-gray-600">
+                  Mostrando {pageStart} a {pageEnd} de {totalItems} itens
+                </p>
+
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="inline-flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    <span>Anterior</span>
+                  </button>
+
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNumber = i + 1
+
+                    if (totalPages > 5) {
+                      if (currentPage <= 3) {
+                        pageNumber = i + 1
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNumber = totalPages - 4 + i
+                      } else {
+                        pageNumber = currentPage - 2 + i
+                      }
+                    }
+
+                    return (
                       <button
-                        onClick={() => openModal(item)}
-                        className="text-blue-600 hover:text-blue-700 p-1"
-                        title="Editar"
+                        key={pageNumber}
+                        type="button"
+                        onClick={() => handlePageChange(pageNumber)}
+                        className={`px-3 py-2 rounded-lg text-sm border ${
+                          pageNumber === currentPage
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
                       >
-                        <Edit className="h-4 w-4" />
+                        {pageNumber}
                       </button>
-                      <button
-                        onClick={() => handleDelete(item)}
-                        className="text-red-600 hover:text-red-700 p-1"
-                        title="Excluir"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
+                    )
+                  })}
 
-                  <div className="mb-4">
-                    <h3 className="font-semibold text-gray-900 mb-1">{item.nome}</h3>
-                    <p className="text-sm text-gray-600 mb-2">{item.descricao}</p>
-                    <span className="inline-block bg-gray-100 text-gray-700 text-xs px-2 py-1 rounded">
-                      {item.categoria}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2 mb-4">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Estoque atual:</span>
-                      <span className="font-medium">{item.estoque_atual} {item.unidade_medida}</span>
-                    </div>
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-500">Estoque mínimo:</span>
-                      <span className="font-medium">{item.estoque_minimo} {item.unidade_medida}</span>
-                    </div>
-                    {item.preco_unitario && (
-                      <div className="flex justify-between text-sm">
-                        <span className="text-gray-500">Preço unitário:</span>
-                        <span className="font-medium">R$ {item.preco_unitario.toFixed(2)}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="flex items-center justify-between">
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStockStatusColor(stockStatus)}`}>
-                      {stockStatus === 'baixo' && <AlertTriangle className="h-3 w-3 mr-1" />}
-                      {getStockStatusText(stockStatus)}
-                    </span>
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                      item.ativo ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {item.ativo ? 'Ativo' : 'Inativo'}
-                    </span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="inline-flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span>PrÃ³xima</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
                 </div>
-              )
-            })}
-          </div>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Modal */}
         {showModal && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
             <div className="bg-white rounded-lg max-w-2xl w-full max-h-[90vh] overflow-y-auto">
@@ -515,7 +602,6 @@ function GerenciamentoItens() {
 
               <form onSubmit={handleSubmit} className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  {/* Imagem */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Imagem do Item
@@ -548,13 +634,12 @@ function GerenciamentoItens() {
                           <span>Escolher Imagem</span>
                         </label>
                         <p className="text-xs text-gray-500 mt-1">
-                          Máximo 5MB • JPG, PNG, GIF
+                          MÃ¡ximo 5MB â€¢ JPG, PNG, GIF
                         </p>
                       </div>
                     </div>
                   </div>
 
-                  {/* Nome */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Nome *
@@ -568,7 +653,6 @@ function GerenciamentoItens() {
                     />
                   </div>
 
-                  {/* Categoria */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Categoria *
@@ -586,10 +670,9 @@ function GerenciamentoItens() {
                     </select>
                   </div>
 
-                  {/* Descrição */}
                   <div className="md:col-span-2">
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Descrição *
+                      DescriÃ§Ã£o *
                     </label>
                     <textarea
                       required
@@ -600,7 +683,6 @@ function GerenciamentoItens() {
                     />
                   </div>
 
-                  {/* Unidade de Medida */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Unidade de Medida *
@@ -618,10 +700,9 @@ function GerenciamentoItens() {
                     </select>
                   </div>
 
-                  {/* Preço Unitário */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Preço Unitário (R$)
+                      PreÃ§o UnitÃ¡rio (R$)
                     </label>
                     <input
                       type="number"
@@ -633,7 +714,6 @@ function GerenciamentoItens() {
                     />
                   </div>
 
-                  {/* Estoque Atual */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
                       Estoque Atual *
@@ -648,10 +728,9 @@ function GerenciamentoItens() {
                     />
                   </div>
 
-                  {/* Estoque Mínimo */}
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Estoque Mínimo *
+                      Estoque MÃ­nimo *
                     </label>
                     <input
                       type="number"
@@ -663,7 +742,6 @@ function GerenciamentoItens() {
                     />
                   </div>
 
-                  {/* Status */}
                   <div className="md:col-span-2">
                     <label className="flex items-center space-x-2">
                       <input
@@ -699,10 +777,8 @@ function GerenciamentoItens() {
           </div>
         )}
       </div>
-      </div>
-    
+    </div>
   )
 }
 
 export default GerenciamentoItens
-

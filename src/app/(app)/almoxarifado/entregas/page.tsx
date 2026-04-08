@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Truck, Package, CheckCircle, User, Calendar, Clock, Eye, AlertCircle } from 'lucide-react'
+import { Truck, Package, CheckCircle, User, Calendar, Clock, Eye, AlertCircle, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuth } from '@/hooks/useAuth'
 
@@ -47,6 +47,19 @@ interface Requisition {
   }
 }
 
+interface RequisitionsResponse {
+  success: boolean
+  data: Requisition[]
+  pagination?: {
+    page: number
+    limit: number
+    total: number
+    totalPages: number
+  }
+}
+
+const ITEMS_PER_PAGE = 20
+
 function Entregas() {
   const { loading: authLoading } = useAuth()
   const router = useRouter()
@@ -57,27 +70,51 @@ function Entregas() {
   const [processing, setProcessing] = useState(false)
   const [filter, setFilter] = useState<'pendente' | 'aprovada' | 'entregue' | 'todas'>('aprovada')
   const [searchName, setSearchName] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [totalPages, setTotalPages] = useState(1)
+  const [totalItems, setTotalItems] = useState(0)
   
   // Estados para controle da entrega
   const [deliveryQuantities, setDeliveryQuantities] = useState<Record<string, number>>({})
   const [deliveryObservations, setDeliveryObservations] = useState('')
 
-  const loadRequisitions = useCallback(async () => {
+  const loadRequisitions = useCallback(async (pageToLoad = currentPage) => {
     try {
-      const response = await fetch('/api/almoxarifado/requisitions/for-delivery', {
-       method: 'GET'
+      setLoading(true)
+
+      const params = new URLSearchParams({
+        page: pageToLoad.toString(),
+        limit: ITEMS_PER_PAGE.toString(),
+        status: filter
+      })
+
+      if (searchName.trim()) {
+        params.append('search', searchName.trim())
+      }
+
+      const response = await fetch(`/api/almoxarifado/requisitions/for-delivery?${params.toString()}`, {
+        method: 'GET'
       })
 
       if (response.ok) {
-        const data = await response.json()
-        // Ensure data is always an array
+        const data: RequisitionsResponse | Requisition[] = await response.json()
         if (Array.isArray(data)) {
           setRequisitions(data)
+          setTotalItems(data.length)
+          setTotalPages(1)
         } else if (data && Array.isArray(data.data)) {
           setRequisitions(data.data)
+          setTotalItems(data.pagination?.total ?? data.data.length)
+          setTotalPages(data.pagination?.totalPages ?? 1)
+
+          if ((data.pagination?.totalPages ?? 1) > 0 && pageToLoad > (data.pagination?.totalPages ?? 1)) {
+            setCurrentPage(data.pagination?.totalPages ?? 1)
+          }
         } else {
           console.warn('API response is not an array:', data)
           setRequisitions([])
+          setTotalItems(0)
+          setTotalPages(1)
         }
       } else if (response.status === 403) {
         toast.error('Você não tem permissão para acessar esta página')
@@ -85,15 +122,19 @@ function Entregas() {
       } else {
         toast.error('Erro ao carregar requisições')
         setRequisitions([])
+        setTotalItems(0)
+        setTotalPages(1)
       }
     } catch (error) {
       console.error('Erro ao carregar requisições:', error)
       toast.error('Erro interno do servidor')
       setRequisitions([])
+      setTotalItems(0)
+      setTotalPages(1)
     } finally {
       setLoading(false)
     }
-  }, [router])
+  }, [currentPage, filter, router, searchName])
 
   useEffect(() => {
     loadRequisitions()
@@ -186,7 +227,7 @@ function Entregas() {
       if (response.ok) {
         toast.success('Entrega registrada com sucesso!')
         closeModal()
-        loadRequisitions()
+        loadRequisitions(currentPage)
       } else {
         const errorData = await response.json()
         toast.error(errorData.error || 'Erro ao registrar entrega')
@@ -199,17 +240,14 @@ function Entregas() {
     }
   }
 
-  const filteredRequisitions = requisitions.filter(req => {
-    if (filter === 'todas') return true
-    if (filter === 'entregue') {
-      return req.status === 'entregue' || req.status === 'parcialmente_entregue'
+  const handlePageChange = (page: number) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page)
     }
-    return req.status === filter
-  }).filter(req => {
-    const termo = searchName.trim().toLowerCase()
-    if (!termo) return true
-    return req.solicitante.nome.toLowerCase().includes(termo)
-  })
+  }
+
+  const pageStart = totalItems === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1
+  const pageEnd = Math.min(currentPage * ITEMS_PER_PAGE, totalItems)
 
   if (loading || authLoading) {
     return (
@@ -238,7 +276,7 @@ function Entregas() {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Controle de Entregas</h1>
                 <p className="text-gray-600">
-                  {requisitions.filter(r => r.status === 'aprovada').length} requisiÇõÇæes aguardando entrega
+                  {totalItems} requisições encontradas • página {currentPage} de {Math.max(totalPages, 1)}
                 </p>
               </div>
             </div>
@@ -252,14 +290,17 @@ function Entregas() {
               <span className="text-sm font-medium text-gray-700">Filtrar por status:</span>
               <div className="flex flex-wrap gap-2">
                 {[
-                  { key: 'pendente', label: 'Aguardando AprovaÇõÇœo' },
+                  { key: 'pendente', label: 'Aguardando Aprovação' },
                   { key: 'aprovada', label: 'Aguardando Entrega' },
                   { key: 'entregue', label: 'Entregues' },
                   { key: 'todas', label: 'Todas' }
                 ].map(option => (
                   <button
                     key={option.key}
-                    onClick={() => setFilter(option.key as 'pendente' | 'aprovada' | 'entregue' | 'todas')}
+                    onClick={() => {
+                      setFilter(option.key as 'pendente' | 'aprovada' | 'entregue' | 'todas')
+                      setCurrentPage(1)
+                    }}
                     className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
                       filter === option.key
                         ? 'bg-blue-600 text-white'
@@ -279,7 +320,10 @@ function Entregas() {
               <input
                 type="text"
                 value={searchName}
-                onChange={(e) => setSearchName(e.target.value)}
+                onChange={(e) => {
+                  setSearchName(e.target.value)
+                  setCurrentPage(1)
+                }}
                 placeholder="Digite o nome do solicitante"
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
               />
@@ -288,7 +332,7 @@ function Entregas() {
         </div>
 
         {/* Lista de Requisições */}
-        {filteredRequisitions.length === 0 ? (
+        {requisitions.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm p-8 text-center">
             <Truck className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-xl font-semibold text-gray-900 mb-2">
@@ -306,7 +350,7 @@ function Entregas() {
           </div>
         ) : (
           <div className="space-y-4">
-            {filteredRequisitions.map((requisition) => (
+            {requisitions.map((requisition) => (
               <div key={requisition.id} className="bg-white rounded-lg shadow-sm p-6">
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -443,6 +487,65 @@ function Entregas() {
                 </div>
               </div>
             ))}
+
+            {totalPages > 1 && (
+              <div className="bg-white rounded-lg shadow-sm p-4 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <p className="text-sm text-gray-600">
+                  Mostrando {pageStart} a {pageEnd} de {totalItems} requisições
+                </p>
+
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(currentPage - 1)}
+                    disabled={currentPage === 1}
+                    className="inline-flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                    <span>Anterior</span>
+                  </button>
+
+                  {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                    let pageNumber = i + 1
+
+                    if (totalPages > 5) {
+                      if (currentPage <= 3) {
+                        pageNumber = i + 1
+                      } else if (currentPage >= totalPages - 2) {
+                        pageNumber = totalPages - 4 + i
+                      } else {
+                        pageNumber = currentPage - 2 + i
+                      }
+                    }
+
+                    return (
+                      <button
+                        key={pageNumber}
+                        type="button"
+                        onClick={() => handlePageChange(pageNumber)}
+                        className={`px-3 py-2 rounded-lg text-sm border ${
+                          pageNumber === currentPage
+                            ? 'bg-blue-600 border-blue-600 text-white'
+                            : 'bg-white border-gray-300 text-gray-700 hover:bg-gray-50'
+                        }`}
+                      >
+                        {pageNumber}
+                      </button>
+                    )
+                  })}
+
+                  <button
+                    type="button"
+                    onClick={() => handlePageChange(currentPage + 1)}
+                    disabled={currentPage === totalPages}
+                    className="inline-flex items-center gap-1 px-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <span>Próxima</span>
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

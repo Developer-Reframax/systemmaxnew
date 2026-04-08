@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyJWTToken } from '@/lib/jwt-middleware'
 import { hashPassword } from '@/lib/auth'
+import { isFirstAccessPassword } from '@/lib/first-access'
 import { getUserPermissions } from '@/lib/permissions-server'
 import { createClient } from '@supabase/supabase-js'
 
@@ -25,6 +26,15 @@ async function userHasEditUsersPermission(user: NonNullable<Awaited<ReturnType<t
   } catch (error) {
     console.error('Erro ao verificar funcionalidade editar_usuarios:', error)
     return false
+  }
+}
+
+function mapUserWithFirstAccess<T extends { password_hash?: string | null }>(user: T) {
+  const { password_hash, ...rest } = user
+
+  return {
+    ...rest,
+    first_access_mode: isFirstAccessPassword(password_hash)
   }
 }
 
@@ -66,6 +76,7 @@ export async function GET(request: NextRequest) {
         status, 
         role, 
         phone, 
+        password_hash,
         created_at,
         letra_id,
         equipe_id,
@@ -99,7 +110,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      users
+      users: (users || []).map((user) => mapUserWithFirstAccess(user))
     })
 
   } catch (error) {
@@ -133,6 +144,7 @@ export async function PUT(request: NextRequest) {
       role,
       phone,
       password_hash,
+      first_access_mode,
       letra_id,
       equipe_id,
       terms_reconhecimento_facial,
@@ -178,7 +190,9 @@ export async function PUT(request: NextRequest) {
     if (consentFlag !== undefined) updateData.terms_reconhecimento_facial = consentFlag
     
     // Hash da senha se fornecida
-    if (password_hash) {
+    if (first_access_mode === true) {
+      updateData.password_hash = null
+    } else if (password_hash) {
       updateData.password_hash = await hashPassword(password_hash)
     }
     
@@ -198,7 +212,7 @@ export async function PUT(request: NextRequest) {
     // Verificar se o usuário existe antes de atualizar
     const { data: existingUser, error: checkError } = await supabase
       .from('usuarios')
-      .select('matricula')
+      .select('matricula, password_hash')
       .eq('matricula', matricula)
       .single()
 
@@ -206,6 +220,13 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json(
         { success: false, message: 'Usuário não encontrado' },
         { status: 404 }
+      )
+    }
+
+    if (first_access_mode === false && !password_hash && isFirstAccessPassword(existingUser.password_hash)) {
+      return NextResponse.json(
+        { success: false, message: 'Informe uma senha para retirar o usuário do primeiro acesso.' },
+        { status: 400 }
       )
     }
 
@@ -223,6 +244,7 @@ export async function PUT(request: NextRequest) {
         status, 
         role, 
         phone,
+        password_hash,
         letra_id,
         equipe_id,
         letra:letras!usuarios_letra_id_fkey(id, letra),
@@ -247,7 +269,7 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({
       success: true,
       message: 'Usuário atualizado com sucesso',
-      user: updatedUser[0]
+      user: mapUserWithFirstAccess(updatedUser[0])
     })
 
   } catch (error) {

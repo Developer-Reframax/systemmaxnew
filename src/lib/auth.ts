@@ -2,6 +2,7 @@ import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { supabase } from './supabase'
 import type { Usuario } from './supabase'
+import { isFirstAccessPassword } from './first-access'
 
 const JWT_SECRET = process.env.JWT_SECRET || 'fallback-secret-key'
 
@@ -34,7 +35,11 @@ export async function hashPassword(password: string): Promise<string> {
 }
 
 // Verify password
-export async function verifyPassword(password: string, hash: string): Promise<boolean> {
+export async function verifyPassword(password: string, hash: string | null | undefined): Promise<boolean> {
+  if (!hash || isFirstAccessPassword(hash)) {
+    return false
+  }
+
   return await bcrypt.compare(password, hash)
 }
 

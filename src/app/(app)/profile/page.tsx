@@ -12,6 +12,7 @@ import {
   X,
   Camera,
   Shield,
+  Lock,
   Brain,
   Sparkles,
   Loader2,
@@ -75,6 +76,12 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false)
   const [avatarFile, setAvatarFile] = useState<File | null>(null)
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null)
+  const [passwordData, setPasswordData] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: ''
+  })
+  const [changingPassword, setChangingPassword] = useState(false)
   const [faceStatus, setFaceStatus] = useState<FaceEnrollmentStatus>({
     status: 'pendente',
     hasTemplates: false,
@@ -560,6 +567,58 @@ export default function ProfilePage() {
     loadProfile()
   }
 
+  const changePassword = async () => {
+    if (!passwordData.currentPassword || !passwordData.newPassword || !passwordData.confirmPassword) {
+      toast.error('Preencha todos os campos de senha')
+      return
+    }
+
+    if (passwordData.newPassword !== passwordData.confirmPassword) {
+      toast.error('A confirmação da nova senha não confere')
+      return
+    }
+
+    if (passwordData.newPassword.length < 6) {
+      toast.error('A nova senha deve ter pelo menos 6 caracteres')
+      return
+    }
+
+    if (passwordData.currentPassword === passwordData.newPassword) {
+      toast.error('A nova senha precisa ser diferente da senha atual')
+      return
+    }
+
+    try {
+      setChangingPassword(true)
+
+      const response = await fetch('/api/users/profile/password', {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(passwordData)
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data?.message || 'Erro ao alterar senha')
+      }
+
+      setPasswordData({
+        currentPassword: '',
+        newPassword: '',
+        confirmPassword: ''
+      })
+      toast.success('Senha alterada com sucesso!')
+    } catch (error) {
+      console.error('Erro ao alterar senha:', error)
+      toast.error(error instanceof Error ? error.message : 'Erro ao alterar senha')
+    } finally {
+      setChangingPassword(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -705,6 +764,73 @@ export default function ProfilePage() {
                     <p>Matrícula: {user?.matricula}</p>
                     <p>Função: {user?.funcao || user?.role}</p>
                     <p>Status: {user?.role}</p>
+                  </div>
+                </div>
+
+                <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 space-y-4">
+                  <div>
+                    <h4 className="text-sm font-medium text-gray-900 dark:text-white mb-2 flex items-center">
+                      <Lock className="h-4 w-4 mr-2" />
+                      Alterar senha
+                    </h4>
+                    <p className="text-sm text-gray-600 dark:text-gray-400">
+                      Use sua senha atual para definir uma nova senha quando quiser.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Senha atual
+                    </label>
+                    <input
+                      type="password"
+                      value={passwordData.currentPassword}
+                      onChange={(e) => setPasswordData((prev) => ({ ...prev, currentPassword: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                      placeholder="Digite sua senha atual"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Nova senha
+                    </label>
+                    <input
+                      type="password"
+                      value={passwordData.newPassword}
+                      onChange={(e) => setPasswordData((prev) => ({ ...prev, newPassword: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                      placeholder="Digite a nova senha"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                      Confirmar nova senha
+                    </label>
+                    <input
+                      type="password"
+                      value={passwordData.confirmPassword}
+                      onChange={(e) => setPasswordData((prev) => ({ ...prev, confirmPassword: e.target.value }))}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+                      placeholder="Repita a nova senha"
+                    />
+                  </div>
+
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={changePassword}
+                      disabled={changingPassword}
+                      className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                    >
+                      {changingPassword ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      ) : (
+                        <Lock className="h-4 w-4 mr-2" />
+                      )}
+                      Alterar senha
+                    </button>
                   </div>
                 </div>
               </div>
