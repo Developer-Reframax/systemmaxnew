@@ -7,22 +7,23 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 );
 
-// GET /api/almoxarifado/requisitions/for-delivery - Listar requisições aprovadas pendentes de entrega
+// GET /api/almoxarifado/requisitions/for-delivery - Listar requisições para entrega
 export async function GET(request: NextRequest) {
   try {
-    // Verificar autenticação
     const authResult = await verifyJWTToken(request);
     if (!authResult.success) {
       return NextResponse.json({ error: authResult.error }, { status: 401 });
     }
 
-    // Parâmetros de consulta
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const status = searchParams.get('status') || 'aprovada';
+    const search = searchParams.get('search');
+    const requestedPage = parseInt(searchParams.get('page') || '1', 10);
+    const requestedLimit = parseInt(searchParams.get('limit') || '20', 10);
+    const page = Number.isNaN(requestedPage) || requestedPage < 1 ? 1 : requestedPage;
+    const limit = Number.isNaN(requestedLimit) || requestedLimit < 1 ? 20 : Math.min(requestedLimit, 100);
     const offset = (page - 1) * limit;
 
-    // Construir query para requisições relevantes para entrega (aprovadas, entregues e parcialmente entregues)
     let query = supabase
       .from('requisicoes')
       .select(`
@@ -39,10 +40,20 @@ export async function GET(request: NextRequest) {
           item:itens_almoxarifado(id, nome, categoria, imagem_url)
         )
       `, { count: 'exact' })
-      .in('status', ['pendente', 'aprovada', 'entregue', 'parcialmente_entregue']) // Incluir todos os status relevantes
-      .order('data_aprovacao', { ascending: true }); // Ordenar por data de aprovação (mais antigas primeiro)
+      .order('created_at', { ascending: false });
 
-    // Aplicar paginação
+    if (status === 'entregue') {
+      query = query.in('status', ['entregue', 'parcialmente_entregue']);
+    } else if (status === 'todas') {
+      query = query.in('status', ['pendente', 'aprovada', 'entregue', 'parcialmente_entregue']);
+    } else {
+      query = query.eq('status', status);
+    }
+
+    if (search) {
+      query = query.ilike('solicitante.nome', `%${search}%`);
+    }
+
     query = query.range(offset, offset + limit - 1);
 
     const { data: requisicoes, error, count } = await query;
@@ -62,7 +73,6 @@ export async function GET(request: NextRequest) {
         totalPages: Math.ceil((count || 0) / limit)
       }
     });
-
   } catch (error) {
     console.error('Erro interno ao buscar requisições para entrega:', error);
     return NextResponse.json({ error: 'Erro interno do servidor' }, { status: 500 });

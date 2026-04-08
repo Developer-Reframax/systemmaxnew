@@ -14,6 +14,7 @@ interface UserFormData {
   email: string
   matricula: number
   senha?: string
+  first_access_mode: boolean
   funcao: string
   contrato_raiz: string
   phone: string
@@ -129,6 +130,7 @@ export default function UsersPage() {
     email: '',
     matricula: 0,
     senha: '',
+    first_access_mode: false,
     funcao: '',
     contrato_raiz: '',
     phone: '',
@@ -211,11 +213,12 @@ export default function UsersPage() {
           phone: formData.phone,
           role: formData.role,
           status: formData.status,
+          first_access_mode: formData.first_access_mode,
           letra_id: formData.letra_id || undefined,
           equipe_id: formData.equipe_id || undefined
         }
 
-        if (formData.senha) {
+        if (!formData.first_access_mode && formData.senha) {
           updateData.password_hash = formData.senha // Hash should be done on server side
         }
 
@@ -233,7 +236,7 @@ export default function UsersPage() {
         toast.success('Usurio atualizado com sucesso!')
       } else {
         // Create new user
-        if (!formData.senha) {
+        if (!formData.first_access_mode && !formData.senha) {
           toast.error('Senha  obrigatria para novos usurios')
           return
         }
@@ -244,7 +247,8 @@ export default function UsersPage() {
             nome: formData.nome,
             email: formData.email,
             matricula: formData.matricula,
-            senha: formData.senha!,
+            senha: formData.senha || undefined,
+            first_access_mode: formData.first_access_mode,
             role: formData.role,
             funcao: formData.funcao,
             contrato_raiz: formData.contrato_raiz,
@@ -283,6 +287,7 @@ export default function UsersPage() {
       email: user.email,
       matricula: user.matricula,
       senha: '',
+      first_access_mode: user.first_access_mode === true,
       funcao: user.funcao || '',
       contrato_raiz: user.contrato_raiz || '',
       phone: user.phone || '',
@@ -343,6 +348,7 @@ export default function UsersPage() {
       email: '',
       matricula: 0,
       senha: '',
+      first_access_mode: false,
       funcao: '',
       contrato_raiz: '',
       phone: '',
@@ -1192,21 +1198,48 @@ export default function UsersPage() {
                     />
                   </div>
                   <div>
+                    <label className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={formData.first_access_mode}
+                        onChange={(e) =>
+                          setFormData({
+                            ...formData,
+                            first_access_mode: e.target.checked,
+                            senha: e.target.checked ? '' : formData.senha
+                          })
+                        }
+                        className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-amber-900">
+                        Usuário definirá a senha no primeiro acesso.
+                      </span>
+                    </label>
+                  </div>
+                  <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      Senha {!editingUser && '*'}
+                      Senha {!editingUser && !formData.first_access_mode && '*'}
                     </label>
                     <div className="relative">
                       <input
                         type={showPassword ? 'text' : 'password'}
-                        required={!editingUser}
+                        required={!editingUser && !formData.first_access_mode}
                         value={formData.senha}
                         onChange={(e) => setFormData({ ...formData, senha: e.target.value })}
                         className="w-full px-3 py-2 pr-10 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                        placeholder={editingUser ? 'Deixe em branco para manter a senha atual' : ''}
+                        placeholder={
+                          formData.first_access_mode
+                            ? 'A senha será definida pelo usuário no login'
+                            : editingUser
+                              ? 'Deixe em branco para manter a senha atual'
+                              : ''
+                        }
+                        disabled={formData.first_access_mode}
                       />
                       <button
                         type="button"
                         onClick={() => setShowPassword(!showPassword)}
+                        disabled={formData.first_access_mode}
                         className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
                       >
                         {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}

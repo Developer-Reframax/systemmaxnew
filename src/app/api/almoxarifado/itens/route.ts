@@ -21,9 +21,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const categoria = searchParams.get('categoria');
     const disponivel = searchParams.get('disponivel');
+    const ativo = searchParams.get('ativo');
+    const status = searchParams.get('status');
+    const estoque = searchParams.get('estoque');
     const search = searchParams.get('search');
-    const page = parseInt(searchParams.get('page') || '1');
-    const limit = parseInt(searchParams.get('limit') || '20');
+    const requestedPage = parseInt(searchParams.get('page') || '1', 10);
+    const requestedLimit = parseInt(searchParams.get('limit') || '20', 10);
+    const page = Number.isNaN(requestedPage) || requestedPage < 1 ? 1 : requestedPage;
+    const limit = Number.isNaN(requestedLimit) || requestedLimit < 1 ? 20 : Math.min(requestedLimit, 100);
     const offset = (page - 1) * limit;
 
     const contratoUsuario = authResult.user?.contrato_raiz;
@@ -35,11 +40,20 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('itens_almoxarifado')
       .select('*', { count: 'exact' })
-      .eq('ativo', true)
       .eq('contrato', contratoUsuario)
       .order('nome');
 
     // Aplicar filtros
+    if (status === 'ativo') {
+      query = query.eq('ativo', true);
+    } else if (status === 'inativo') {
+      query = query.eq('ativo', false);
+    } else if (ativo === 'true') {
+      query = query.eq('ativo', true);
+    } else if (ativo === 'false') {
+      query = query.eq('ativo', false);
+    }
+
     if (categoria) {
       query = query.eq('categoria', categoria);
     }
@@ -50,6 +64,12 @@ export async function GET(request: NextRequest) {
 
     if (search) {
       query = query.or(`nome.ilike.%${search}%,descricao.ilike.%${search}%`);
+    }
+
+    if (estoque === 'zerado') {
+      query = query.eq('estoque_atual', 0);
+    } else if (estoque === 'baixo') {
+      query = query.or('and(estoque_atual.lte.estoque_minimo,estoque_atual.gt.0)');
     }
 
     // Aplicar paginação

@@ -21,7 +21,7 @@ export interface Usuario {
   bio?: string
   avatar_url?: string
   status: 'ativo' | 'inativo'
-  password_hash: string
+  password_hash: string | null
   termos: boolean
   terceiro: boolean
   role: 'Admin' | 'Editor' | 'Usuario'
@@ -46,6 +46,7 @@ export interface Usuario {
   contratos?: Contrato[] // Contratos que o usuário tem acesso
   letra?: Letra // Relacionamento com letra
   equipe?: Equipe // Relacionamento com equipe
+  first_access_mode?: boolean
 }
 
 export interface Contrato {

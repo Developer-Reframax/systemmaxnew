@@ -9,6 +9,7 @@ import { Orbitron, Space_Grotesk } from 'next/font/google'
 
 const orbitron = Orbitron({ subsets: ['latin'], weight: ['500', '600', '700'] })
 const spaceGrotesk = Space_Grotesk({ subsets: ['latin'], weight: ['400', '500', '600'] })
+type FirstAccessStep = 'identity' | 'password'
 
 const backgroundAnimation = `
   :root {
@@ -91,6 +92,8 @@ export default function LoginPage() {
   const [identifier, setIdentifier] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
+  const [showNewPassword, setShowNewPassword] = useState(false)
+  const [showConfirmNewPassword, setShowConfirmNewPassword] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [resetLoading, setResetLoading] = useState(false)
@@ -100,9 +103,34 @@ export default function LoginPage() {
   const [confirmText, setConfirmText] = useState('')
   const [pendingIdentifier, setPendingIdentifier] = useState('')
   const [helpOpen, setHelpOpen] = useState(false)
+  const [firstAccessOpen, setFirstAccessOpen] = useState(false)
+  const [firstAccessStep, setFirstAccessStep] = useState<FirstAccessStep>('identity')
+  const [firstAccessMatricula, setFirstAccessMatricula] = useState<number | null>(null)
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [verificationToken, setVerificationToken] = useState('')
+  const [newPassword, setNewPassword] = useState('')
+  const [confirmNewPassword, setConfirmNewPassword] = useState('')
+  const [firstAccessError, setFirstAccessError] = useState('')
+  const [firstAccessLoading, setFirstAccessLoading] = useState(false)
 
-  const { login, isAuthenticated } = useAuth()
+  const { login, completeFirstAccess, isAuthenticated } = useAuth()
   const router = useRouter()
+
+  const resetFirstAccessState = () => {
+    setFirstAccessOpen(false)
+    setFirstAccessStep('identity')
+    setFirstAccessMatricula(null)
+    setFirstName('')
+    setLastName('')
+    setVerificationToken('')
+    setNewPassword('')
+    setConfirmNewPassword('')
+    setFirstAccessError('')
+    setFirstAccessLoading(false)
+    setShowNewPassword(false)
+    setShowConfirmNewPassword(false)
+  }
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -114,18 +142,29 @@ export default function LoginPage() {
     e.preventDefault()
     setError('')
 
-    if (!identifier.trim() || !password.trim()) {
-      setError('Por favor, preencha todos os campos')
+    if (!identifier.trim()) {
+      setError('Por favor, informe sua matricula')
       return
     }
 
     setLoading(true)
 
     try {
-      const result = await login(identifier.trim(), password)
+      const result = await login(identifier.trim(), password.trim())
 
       if (result.success) {
         router.push('/dashboard')
+      } else if (result.requiresFirstAccess && result.matricula) {
+        setPassword('')
+        setFirstAccessMatricula(result.matricula)
+        setFirstAccessStep('identity')
+        setVerificationToken('')
+        setNewPassword('')
+        setConfirmNewPassword('')
+        setFirstName('')
+        setLastName('')
+        setFirstAccessError('')
+        setFirstAccessOpen(true)
       } else {
         setError(result.message || 'Erro no login')
       }
@@ -133,6 +172,78 @@ export default function LoginPage() {
       setError('Erro interno do servidor')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleVerifyFirstAccess = async () => {
+    setFirstAccessError('')
+
+    if (!firstAccessMatricula) {
+      setFirstAccessError('Matricula nao encontrada para o primeiro acesso.')
+      return
+    }
+
+    if (!firstName.trim() || !lastName.trim()) {
+      setFirstAccessError('Informe o primeiro nome e o ultimo nome.')
+      return
+    }
+
+    setFirstAccessLoading(true)
+
+    try {
+      const response = await fetch('/api/auth/first-access/verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          matricula: firstAccessMatricula,
+          firstName,
+          lastName
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok || !data.success || !data.verificationToken) {
+        setFirstAccessError(data.message || 'Nao foi possivel validar seus dados.')
+        return
+      }
+
+      setVerificationToken(data.verificationToken)
+      setFirstAccessStep('password')
+      setFirstAccessError('')
+    } catch {
+      setFirstAccessError('Erro ao validar os dados do primeiro acesso.')
+    } finally {
+      setFirstAccessLoading(false)
+    }
+  }
+
+  const handleCompleteFirstAccess = async () => {
+    setFirstAccessError('')
+
+    if (!verificationToken) {
+      setFirstAccessError('Valide seus dados antes de cadastrar a nova senha.')
+      return
+    }
+
+    setFirstAccessLoading(true)
+
+    try {
+      const result = await completeFirstAccess(verificationToken, newPassword, confirmNewPassword)
+
+      if (!result.success) {
+        setFirstAccessError(result.message || 'Nao foi possivel concluir o primeiro acesso.')
+        return
+      }
+
+      resetFirstAccessState()
+      router.push('/dashboard')
+    } catch {
+      setFirstAccessError('Erro ao concluir o primeiro acesso.')
+    } finally {
+      setFirstAccessLoading(false)
     }
   }
 
@@ -324,11 +435,10 @@ export default function LoginPage() {
                         name="password"
                         type={showPassword ? 'text' : 'password'}
                         autoComplete="current-password"
-                        required
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
                         className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-12 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
-                        placeholder="Digite sua senha"
+                        placeholder="Digite sua senha ou deixe em branco no primeiro acesso"
                         disabled={loading}
                       />
                       <button
@@ -477,6 +587,199 @@ export default function LoginPage() {
                   </p>
                 </div>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {firstAccessOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
+          <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-sm" />
+          <div className="relative max-w-lg w-full bg-white rounded-2xl shadow-2xl border border-blue-100 overflow-hidden">
+            <div className="flex items-center gap-3 px-5 py-4 bg-gradient-to-r from-blue-600 to-cyan-500 text-white">
+              <div className="p-2 bg-white/15 rounded-lg">
+                <ShieldCheck className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-sm font-semibold uppercase tracking-wide">Primeiro acesso</p>
+                <p className="text-xs text-blue-100">
+                  Matricula {firstAccessMatricula ?? (identifier.trim() || '-')}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={resetFirstAccessState}
+                className="ml-auto text-white/80 hover:text-white"
+                aria-label="Fechar"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="px-5 py-6 space-y-5">
+              <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.2em] text-slate-400">
+                <span className={firstAccessStep === 'identity' ? 'text-blue-600' : 'text-emerald-600'}>1. Validar nome</span>
+                <span className="h-px flex-1 bg-slate-200" />
+                <span className={firstAccessStep === 'password' ? 'text-blue-600' : 'text-slate-400'}>2. Criar senha</span>
+              </div>
+
+              {firstAccessError && (
+                <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                  {firstAccessError}
+                </div>
+              )}
+
+              {firstAccessStep === 'identity' ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-600">
+                    Detectamos uma tentativa de primeiro acesso. Confirme seu primeiro nome e ultimo nome para continuar.
+                  </p>
+
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        Primeiro nome
+                      </label>
+                      <input
+                        type="text"
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        placeholder="Ex.: JOAO"
+                        disabled={firstAccessLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                        Ultimo nome
+                      </label>
+                      <input
+                        type="text"
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        placeholder="Ex.: SILVA"
+                        disabled={firstAccessLoading}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={resetFirstAccessState}
+                      className="flex-1 inline-flex justify-center items-center gap-2 px-4 py-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleVerifyFirstAccess}
+                      disabled={firstAccessLoading}
+                      className="flex-1 inline-flex justify-center items-center gap-2 px-4 py-3 rounded-xl bg-blue-600 text-white font-semibold hover:bg-blue-700 disabled:opacity-60 transition-colors"
+                    >
+                      {firstAccessLoading ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+                          Validando
+                        </>
+                      ) : (
+                        'Confirmar dados'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  <p className="text-sm text-slate-600">
+                    Dados confirmados. Cadastre sua nova senha para concluir o primeiro acesso.
+                  </p>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      Nova senha
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showNewPassword ? 'text' : 'password'}
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-12 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        placeholder="Minimo de 6 caracteres"
+                        disabled={firstAccessLoading}
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center"
+                        onClick={() => setShowNewPassword(!showNewPassword)}
+                        disabled={firstAccessLoading}
+                      >
+                        {showNewPassword ? (
+                          <EyeOff className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                      Confirmar nova senha
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showConfirmNewPassword ? 'text' : 'password'}
+                        value={confirmNewPassword}
+                        onChange={(e) => setConfirmNewPassword(e.target.value)}
+                        className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 pr-12 text-sm text-slate-800 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/30"
+                        placeholder="Repita a senha"
+                        disabled={firstAccessLoading}
+                      />
+                      <button
+                        type="button"
+                        className="absolute inset-y-0 right-0 pr-4 flex items-center"
+                        onClick={() => setShowConfirmNewPassword(!showConfirmNewPassword)}
+                        disabled={firstAccessLoading}
+                      >
+                        {showConfirmNewPassword ? (
+                          <EyeOff className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                        ) : (
+                          <Eye className="h-4 w-4 text-slate-400 hover:text-slate-600" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFirstAccessStep('identity')
+                        setFirstAccessError('')
+                      }}
+                      className="flex-1 inline-flex justify-center items-center gap-2 px-4 py-3 rounded-xl border border-slate-300 text-slate-700 hover:bg-slate-50 transition-colors"
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleCompleteFirstAccess}
+                      disabled={firstAccessLoading}
+                      className="flex-1 inline-flex justify-center items-center gap-2 px-4 py-3 rounded-xl bg-emerald-600 text-white font-semibold hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+                    >
+                      {firstAccessLoading ? (
+                        <>
+                          <span className="h-4 w-4 animate-spin rounded-full border-b-2 border-white" />
+                          Salvando
+                        </>
+                      ) : (
+                        'Cadastrar senha'
+                      )}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
