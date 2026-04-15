@@ -86,14 +86,18 @@ export default function MinhasPendencias() {
       setLoading(true)
     
       const params = new URLSearchParams({
-        page: pagination.page.toString(),
-        limit: pagination.limit.toString(),
         responsavel: user?.matricula?.toString() || '', // Matrícula do usuário logado convertida para string
         status: 'Em Andamento', // Apenas desvios em andamento
         ...Object.fromEntries(
           Object.entries(filters).filter(([, value]) => value !== '')
         )
       })
+
+      params.delete('page')
+      params.delete('limit')
+      params.delete('status')
+      params.append('status', 'Em Andamento')
+      params.append('status', 'Vencido')
 
       const response = await fetch(`/api/desvios?${params}`, {
         method: 'GET'
@@ -109,8 +113,12 @@ export default function MinhasPendencias() {
         setDesvios(data.data)
         setPagination(prev => ({
           ...prev,
-          total: data.pagination.total,
-          totalPages: data.pagination.totalPages
+          page:
+            Math.ceil((data.total || data.data.length) / prev.limit) > 0
+              ? Math.min(prev.page, Math.ceil((data.total || data.data.length) / prev.limit))
+              : 1,
+          total: data.total || data.data.length,
+          totalPages: Math.ceil((data.total || data.data.length) / prev.limit)
         }))
       } else {
         toast.error(data.message || 'Erro ao carregar pendências')
@@ -122,7 +130,7 @@ export default function MinhasPendencias() {
     } finally {
       setLoading(false)
     }
-  }, [pagination.page, pagination.limit, filters, user?.matricula])
+  }, [filters, user?.matricula])
 
   useEffect(() => {
     loadDesvios()
@@ -142,7 +150,13 @@ export default function MinhasPendencias() {
       data_inicio: '',
       data_fim: ''
     })
+    setPagination(prev => ({ ...prev, page: 1 }))
   }
+
+  const paginatedDesvios = desvios.slice(
+    (pagination.page - 1) * pagination.limit,
+    pagination.page * pagination.limit
+  )
 
   const openResolucaoModal = (desvio: Desvio) => {
     setResolucaoModal({ isOpen: true, desvio })
@@ -365,10 +379,10 @@ export default function MinhasPendencias() {
                 className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-purple-500 dark:bg-gray-700 dark:text-white"
               >
                 <option value="">Todas</option>
-                <option value="Baixa">Trivial</option>
-                <option value="Média">Moderado</option>
-                <option value="Alta">substancial</option>
-                <option value="Crítica">Intolerável</option>
+                <option value="Trivial">Trivial</option>
+                <option value="Moderado">Moderado</option>
+                <option value="Substancial">Substancial</option>
+                <option value="Intolerável">Intolerável</option>
               </select>
             </div>
             
@@ -459,7 +473,7 @@ export default function MinhasPendencias() {
                     </tr>
                   </thead>
                   <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-600">
-                    {desvios.map((desvio) => {
+                    {paginatedDesvios.map((desvio) => {
                       const diasRestantes = getDiasRestantes(desvio.data_limite)
                       const vencido = isVencido(desvio.data_limite)
                       const proximoVencimento = isProximoVencimento(desvio.data_limite)

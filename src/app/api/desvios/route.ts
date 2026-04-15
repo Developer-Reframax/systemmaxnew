@@ -8,6 +8,18 @@ const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const supabase = createClient(supabaseUrl, supabaseServiceKey)
 const SESMT_FUNCTIONALITY_SLUG = 'relatos-sesmt'
+const DEFAULT_PAGE_SIZE = 10
+const MAX_PAGE_SIZE = 100
+const POTENCIAL_FILTER_MAP: Record<string, string> = {
+  baixa: 'Trivial',
+  trivial: 'Trivial',
+  media: 'Moderado',
+  moderado: 'Moderado',
+  alta: 'Substancial',
+  substancial: 'Substancial',
+  critica: 'Intoler\u00E1vel',
+  intoleravel: 'Intoler\u00E1vel'
+}
 const EDITABLE_DESVIO_FIELDS = [
   'local',
   'natureza_id',
@@ -51,6 +63,29 @@ function normalizeOptionalString(value: unknown) {
 
   const trimmed = value.trim()
   return trimmed ? trimmed : null
+}
+
+function normalizeFilterString(value: string) {
+  return value
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function parsePositiveInteger(value: string | null, fallback: number) {
+  if (!value) {
+    return fallback
+  }
+
+  const parsedValue = Number.parseInt(value, 10)
+  return Number.isFinite(parsedValue) && parsedValue > 0 ? parsedValue : fallback
+}
+
+function parseBooleanParam(value: string | null) {
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return null
 }
 
 function normalizeOccurrenceDateToCreatedAt(value: unknown) {
@@ -151,23 +186,62 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url)
-    const status = searchParams.get('status')
+    const statusValues = Array.from(
+      new Set(
+        searchParams
+          .getAll('status')
+          .flatMap((value) => value.split(','))
+          .map((value) => value.trim())
+          .filter(Boolean)
+      )
+    )
     const contratoParam = searchParams.get('contrato')
     const responsavel = searchParams.get('responsavel')
     const matricula_user = searchParams.get('matricula_user')
     const apenasEquipesSupervisionadas =
       searchParams.get('apenas_equipes_supervisionadas') === 'true'
+    const potencial = searchParams.get('potencial')
+    const verAgir = parseBooleanParam(searchParams.get('ver_agir'))
+    const vencimento = searchParams.get('vencimento')
+    const dataInicio = searchParams.get('data_inicio')
+    const dataFim = searchParams.get('data_fim')
     const meus = searchParams.get('meus') // Novo parâmetro para filtrar desvios do usuário
     const search = searchParams.get('search') // Parâmetro para busca por título, descrição ou local
     const potencial_local = searchParams.get('potencial_local') // Parâmetro para filtrar por gravidade/potencial local
-    const page = parseInt(searchParams.get('page') || '1')
-    const limit = parseInt(searchParams.get('limit') || '10')
-    const offset = (page - 1) * limit
+    const shouldPaginate = searchParams.has('page') || searchParams.has('limit')
+    const page = shouldPaginate ? parsePositiveInteger(searchParams.get('page'), 1) : 1
+    const limit = shouldPaginate
+      ? Math.min(
+          parsePositiveInteger(searchParams.get('limit'), DEFAULT_PAGE_SIZE),
+          MAX_PAGE_SIZE
+        )
+      : null
+    const offset = shouldPaginate && limit ? (page - 1) * limit : 0
     const userContract = authResult.user?.contrato_raiz
+    const normalizedPotencial =
+      potencial && POTENCIAL_FILTER_MAP[normalizeFilterString(potencial)]
+        ? POTENCIAL_FILTER_MAP[normalizeFilterString(potencial)]
+        : potencial?.trim()
+    const parsedDataInicio = parseDateOnly(dataInicio)
+    const parsedDataFim = parseDateOnly(dataFim)
 
     if (!userContract) {
       return NextResponse.json(
         { success: false, message: 'Contrato raiz do usuario nao encontrado' },
+        { status: 400 }
+      )
+    }
+
+    if (dataInicio && !parsedDataInicio) {
+      return NextResponse.json(
+        { success: false, message: 'Filtro data_inicio invalido' },
+        { status: 400 }
+      )
+    }
+
+    if (dataFim && !parsedDataFim) {
+      return NextResponse.json(
+        { success: false, message: 'Filtro data_fim invalido' },
         { status: 400 }
       )
     }
@@ -191,12 +265,15 @@ export async function GET(request: NextRequest) {
       `)
       .order('created_at', { ascending: false })
       .eq('contrato', userContract)
-      .range(offset, offset + limit - 1)
 
     let countQuery = supabase
       .from('desvios')
       .select('*', { count: 'exact', head: true })
       .eq('contrato', userContract)
+
+    if (shouldPaginate && limit) {
+      query = query.range(offset, offset + limit - 1)
+    }
 
     if (apenasEquipesSupervisionadas) {
       const matricula = authResult.user?.matricula
@@ -251,9 +328,12 @@ export async function GET(request: NextRequest) {
     }
 
     // Aplicar filtros
-    if (status) {
-      query = query.eq('status', status)
-      countQuery = countQuery.eq('status', status)
+    if (statusValues.length === 1) {
+      query = query.eq('status', statusValues[0])
+      countQuery = countQuery.eq('status', statusValues[0])
+    } else if (statusValues.length > 1) {
+      query = query.in('status', statusValues)
+      countQuery = countQuery.in('status', statusValues)
     }
     if (responsavel) {
       query = query.eq('responsavel', responsavel)
@@ -270,13 +350,51 @@ export async function GET(request: NextRequest) {
     }
     // Filtro de busca por título, descrição ou local
     if (search) {
-      query = query.or(`descricao.ilike.%${search}%,local.ilike.%${search}%`)
-      countQuery = countQuery.or(`descricao.ilike.%${search}%,local.ilike.%${search}%`)
+      query = query.or(`titulo.ilike.%${search}%,descricao.ilike.%${search}%,local.ilike.%${search}%`)
+      countQuery = countQuery.or(`titulo.ilike.%${search}%,descricao.ilike.%${search}%,local.ilike.%${search}%`)
     }
-    // Filtro por potencial local (gravidade)
+    if (normalizedPotencial) {
+      query = query.eq('potencial', normalizedPotencial)
+      countQuery = countQuery.eq('potencial', normalizedPotencial)
+    }
     if (potencial_local) {
       query = query.eq('potencial_local', potencial_local)
       countQuery = countQuery.eq('potencial_local', potencial_local)
+    }
+    if (verAgir !== null) {
+      query = query.eq('ver_agir', verAgir)
+      countQuery = countQuery.eq('ver_agir', verAgir)
+    }
+    if (parsedDataInicio) {
+      const dataInicioIso = parsedDataInicio.toISOString().slice(0, 10)
+      query = query.gte('data_ocorrencia', dataInicioIso)
+      countQuery = countQuery.gte('data_ocorrencia', dataInicioIso)
+    }
+    if (parsedDataFim) {
+      const dataFimIso = parsedDataFim.toISOString().slice(0, 10)
+      query = query.lte('data_ocorrencia', dataFimIso)
+      countQuery = countQuery.lte('data_ocorrencia', dataFimIso)
+    }
+    if (vencimento === 'vencidos' || vencimento === 'proximos') {
+      const hoje = new Date()
+      hoje.setHours(0, 0, 0, 0)
+      const hojeIso = hoje.toISOString()
+
+      if (vencimento === 'vencidos') {
+        query = query.lt('data_limite', hojeIso)
+        countQuery = countQuery.lt('data_limite', hojeIso)
+      } else {
+        const proximoVencimento = new Date(hoje)
+        proximoVencimento.setDate(proximoVencimento.getDate() + 3)
+        const proximoVencimentoIso = proximoVencimento.toISOString()
+
+        query = query
+          .gte('data_limite', hojeIso)
+          .lte('data_limite', proximoVencimentoIso)
+        countQuery = countQuery
+          .gte('data_limite', hojeIso)
+          .lte('data_limite', proximoVencimentoIso)
+      }
     }
 
     const [{ data: desvios, error }, { count, error: countError }] = await Promise.all([
@@ -375,16 +493,22 @@ export async function GET(request: NextRequest) {
         : null
     }))
 
-    const totalPages = Math.ceil((count || 0) / limit)
+    const total = count || 0
+    const totalPages =
+      shouldPaginate && limit
+        ? Math.ceil(total / limit)
+        : total > 0
+          ? 1
+          : 0
 
     return NextResponse.json({
       success: true,
       data: desviosComResponsaveis,
-      total: count || 0,
+      total,
       pagination: {
         page,
-        limit,
-        total: count || 0,
+        limit: limit ?? total,
+        total,
         totalPages
       }
     })
