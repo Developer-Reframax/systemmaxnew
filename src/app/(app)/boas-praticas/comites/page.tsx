@@ -32,7 +32,7 @@ type Comite = {
 
 type Contrato = {
   codigo: string
-  nome?: string
+  nome?: string | null
 }
 
 type Usuario = {
@@ -65,6 +65,7 @@ function ComitesPage() {
   const [contratos, setContratos] = useState<Contrato[]>([])
   const [usuarios, setUsuarios] = useState<Usuario[]>([])
   const [loading, setLoading] = useState(false)
+  const [contratosLoading, setContratosLoading] = useState(false)
   const [usuariosLoading, setUsuariosLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [tipoFiltro, setTipoFiltro] = useState<'todos' | ComiteTipo>('todos')
@@ -75,20 +76,12 @@ function ComitesPage() {
 
   const loadComites = useCallback(async () => {
     setLoading(true)
-    const token = localStorage.getItem('auth_token')
-    if (!token) {
-      setLoading(false)
-      return
-    }
-
     try {
       const params = new URLSearchParams()
       if (searchTerm) params.set('search', searchTerm)
       if (tipoFiltro !== 'todos') params.set('tipo', tipoFiltro)
 
-      const res = await fetch(`/api/boas-praticas/comites?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      })
+      const res = await fetch(`/api/boas-praticas/comites?${params.toString()}`)
 
       if (!res.ok) {
         throw new Error('Erro ao carregar comites')
@@ -105,31 +98,32 @@ function ComitesPage() {
   }, [searchTerm, tipoFiltro])
 
   const loadContratos = useCallback(async () => {
-    const token = localStorage.getItem('auth_token')
-    if (!token) return
+    setContratosLoading(true)
     try {
-      const res = await fetch('/api/contracts', {
-        headers: { Authorization: `Bearer ${token}` }
-      })
-      if (!res.ok) return
+      const res = await fetch('/api/contracts')
+      if (!res.ok) {
+        throw new Error('Erro ao carregar contratos')
+      }
       const data = await res.json()
-      setContratos(data.contracts || data.data || [])
-    } catch {
+      const contratosData = Array.isArray(data.contracts || data.data)
+        ? ((data.contracts || data.data) as Contrato[])
+        : []
+      setContratos(contratosData.filter((contrato) => Boolean(contrato.codigo)))
+    } catch (err) {
+      console.error(err)
       toast.error('Erro ao carregar contratos')
+    } finally {
+      setContratosLoading(false)
     }
   }, [])
 
   const loadUsuarios = useCallback(
     async (contrato?: string | null) => {
-      const token = localStorage.getItem('auth_token')
-      if (!token) return
       setUsuariosLoading(true)
       try {
         const params = new URLSearchParams()
         if (contrato) params.set('contrato', contrato)
-        const res = await fetch(`/api/boas-praticas/comites/usuarios?${params.toString()}`, {
-          headers: { Authorization: `Bearer ${token}` }
-        })
+        const res = await fetch(`/api/boas-praticas/comites/usuarios?${params.toString()}`)
         if (!res.ok) throw new Error()
         const data = await res.json()
         setUsuarios(data.data || [])
@@ -166,6 +160,13 @@ function ComitesPage() {
     setMembroSearch('')
   }
 
+  const openCreateForm = () => {
+    setShowForm(true)
+    if (contratos.length === 0) {
+      loadContratos()
+    }
+  }
+
   const toggleMember = (matricula: number, checked: boolean | string | undefined) => {
     setFormData((prev) => {
       const isChecked = checked === true
@@ -179,8 +180,6 @@ function ComitesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    const token = localStorage.getItem('auth_token')
-    if (!token) return toast.error('Token nao encontrado')
 
     if (!formData.nome.trim()) {
       return toast.error('Informe o nome do comite')
@@ -209,7 +208,6 @@ function ComitesPage() {
       const res = await fetch(url, {
         method,
         headers: {
-          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
@@ -241,19 +239,18 @@ function ComitesPage() {
       membros: (comite.membros || []).map((m) => m.matricula)
     })
     setShowForm(true)
+    if (contratos.length === 0) {
+      loadContratos()
+    }
   }
 
   const handleDelete = async (id: number) => {
     const confirmed = window.confirm('Deseja realmente excluir este comite?')
     if (!confirmed) return
 
-    const token = localStorage.getItem('auth_token')
-    if (!token) return toast.error('Token nao encontrado')
-
     try {
       const res = await fetch(`/api/boas-praticas/comites/${id}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
+        method: 'DELETE'
       })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) {
@@ -297,7 +294,7 @@ function ComitesPage() {
               </p>
             </div>
           </div>
-          <Button onClick={() => setShowForm(true)} className="bg-blue-600 hover:bg-blue-700">
+          <Button onClick={openCreateForm} className="bg-blue-600 hover:bg-blue-700">
             <Plus className="w-4 h-4 mr-2" />
             Novo comite
           </Button>
@@ -401,14 +398,20 @@ function ComitesPage() {
                         <select
                           className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
                           value={formData.codigo_contrato}
+                          disabled={contratosLoading}
                           onChange={(e) =>
                             setFormData({ ...formData, codigo_contrato: e.target.value })
                           }
                         >
-                          <option value="">Selecione um contrato</option>
+                          <option value="">
+                            {contratosLoading ? 'Carregando contratos...' : 'Selecione um contrato'}
+                          </option>
+                          {!contratosLoading && contratos.length === 0 && (
+                            <option disabled>Nenhum contrato encontrado</option>
+                          )}
                           {contratos.map((c) => (
                             <option key={c.codigo} value={c.codigo}>
-                              {c.codigo} - {c.nome}
+                              {c.codigo} - {c.nome || 'Sem nome'}
                             </option>
                           ))}
                         </select>
