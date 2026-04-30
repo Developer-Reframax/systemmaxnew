@@ -4,9 +4,10 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '@/hooks/useAuth'
 import { useTheme } from '@/hooks/useTheme'
 import { supabase } from '@/lib/supabase'
-import { Settings, Moon, Sun, Bell, Shield, Database, Users, Save, RefreshCw } from 'lucide-react'
+import { Settings, Moon, Sun, Bell, Shield, Database, Users, Save, RefreshCw, BarChart3 } from 'lucide-react'
 import { toast } from 'sonner'
 import { hashPassword } from '@/lib/auth'
+import { ChartsCatalogPage } from '@/components/charts/catalog-page'
 
 interface SystemSettings {
   siteName: string
@@ -188,7 +189,12 @@ export default function SettingsPage() {
     { id: 'account', label: 'Conta', icon: Users },
     { id: 'notifications', label: 'Notificações', icon: Bell },
     { id: 'security', label: 'Segurança', icon: Shield },
-    ...(user?.role === 'Admin' ? [{ id: 'system', label: 'Sistema', icon: Database }] : [])
+    ...(user?.role === 'Admin'
+      ? [
+          { id: 'system', label: 'Sistema', icon: Database },
+          { id: 'charts', label: 'Catálogo de Gráficos', icon: BarChart3 },
+        ]
+      : [])
   ]
 
   return (
@@ -633,6 +639,8 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
+
+            {activeTab === 'charts' && user?.role === 'Admin' && <ChartsCatalogPage />}
           </div>
         </div>
       </div>
