@@ -15,7 +15,8 @@ import {
   Columns,
   Tag,
   Users,
-  Vote
+  Vote,
+  BarChart3
 } from 'lucide-react'
 
 export default function BoasPraticasPage() {
@@ -172,6 +173,19 @@ export default function BoasPraticasPage() {
             <p className="text-xs text-muted-foreground">Praticas cadastradas por voce</p>
           </CardContent>
         </Card>
+
+        {canSeeGestaoGeralCards && (
+          <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/boas-praticas/relatorios')}>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Relatorios Graficos</CardTitle>
+              <BarChart3 className="h-4 w-4 text-blue-600" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-lg font-bold">Analisar dados</div>
+              <p className="text-xs text-muted-foreground">Indicadores, graficos e tabela consolidada de boas praticas</p>
+            </CardContent>
+          </Card>
+        )}
 
         {canSeeGestaoGeralCards && (
           <Card className="hover:shadow-lg transition-shadow cursor-pointer" onClick={() => router.push('/boas-praticas/responsaveis-contratos')}>
