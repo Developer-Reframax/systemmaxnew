@@ -111,12 +111,22 @@ type FilterKey = 'contrato' | 'status' | 'categoria' | 'areaAplicada' | 'pilar'
 
 type ReportFilters = Record<FilterKey, string[]>
 
+interface DateRangeFilter {
+  createdFrom: string
+  createdTo: string
+}
+
 const EMPTY_FILTERS: ReportFilters = {
   areaAplicada: [],
   categoria: [],
   contrato: [],
   pilar: [],
   status: [],
+}
+
+const EMPTY_DATE_RANGE: DateRangeFilter = {
+  createdFrom: '',
+  createdTo: '',
 }
 
 const FILTER_GROUPS: Array<{
@@ -160,6 +170,7 @@ export default function BoasPraticasRelatoriosPage() {
   const [error, setError] = useState<string | null>(null)
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState<ReportFilters>(EMPTY_FILTERS)
+  const [dateRange, setDateRange] = useState<DateRangeFilter>(EMPTY_DATE_RANGE)
   const [search, setSearch] = useState('')
 
   const hasAccess = canAccessFuncionalidade(
@@ -220,21 +231,25 @@ export default function BoasPraticasRelatoriosPage() {
   }, [data?.rows])
 
   const activeFiltersCount = useMemo(
-    () => Object.values(filters).reduce((total, values) => total + values.length, 0),
-    [filters],
+    () =>
+      Object.values(filters).reduce((total, values) => total + values.length, 0) +
+      (dateRange.createdFrom || dateRange.createdTo ? 1 : 0),
+    [dateRange.createdFrom, dateRange.createdTo, filters],
   )
 
   const filteredReportRows = useMemo(() => {
     const rows = data?.rows || []
 
-    return rows.filter((row) =>
-      FILTER_GROUPS.every((group) => {
+    return rows.filter((row) => {
+      const matchesListFilters = FILTER_GROUPS.every((group) => {
         const selectedValues = filters[group.key]
 
         return selectedValues.length === 0 || selectedValues.includes(row[group.key])
-      }),
-    )
-  }, [data?.rows, filters])
+      })
+
+      return matchesListFilters && isWithinCreatedDateRange(row.createdAt, dateRange)
+    })
+  }, [data?.rows, dateRange, filters])
 
   const filteredSummary = useMemo(() => buildSummary(filteredReportRows), [filteredReportRows])
 
@@ -289,6 +304,7 @@ export default function BoasPraticasRelatoriosPage() {
 
   const clearFilters = () => {
     setFilters(EMPTY_FILTERS)
+    setDateRange(EMPTY_DATE_RANGE)
   }
 
   const exportTableToExcel = async () => {
@@ -650,10 +666,12 @@ export default function BoasPraticasRelatoriosPage() {
 
       <ReportFiltersDrawer
         activeFiltersCount={activeFiltersCount}
+        dateRange={dateRange}
         filters={filters}
         filterOptions={filterOptions}
         onClear={clearFilters}
         onClose={() => setFiltersOpen(false)}
+        onDateRangeChange={setDateRange}
         onToggle={toggleFilterValue}
         open={filtersOpen}
       />
@@ -663,18 +681,22 @@ export default function BoasPraticasRelatoriosPage() {
 
 function ReportFiltersDrawer({
   activeFiltersCount,
+  dateRange,
   filters,
   filterOptions,
   onClear,
   onClose,
+  onDateRangeChange,
   onToggle,
   open,
 }: {
   activeFiltersCount: number
+  dateRange: DateRangeFilter
   filters: ReportFilters
   filterOptions: Record<FilterKey, string[]>
   onClear: () => void
   onClose: () => void
+  onDateRangeChange: (dateRange: DateRangeFilter) => void
   onToggle: (key: FilterKey, value: string) => void
   open: boolean
 }) {
@@ -704,6 +726,49 @@ function ReportFiltersDrawer({
         </div>
 
         <div className="flex-1 space-y-6 overflow-y-auto p-5">
+          <section className="space-y-3">
+            <div>
+              <h3 className="text-sm font-semibold text-gray-900 dark:text-white">
+                Data de cadastro
+              </h3>
+              <p className="text-xs text-gray-500 dark:text-gray-400">
+                Filtra as boas praticas pelo intervalo de cadastro, usando a data da coluna created_at.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 rounded-md border border-gray-200 p-3 dark:border-gray-700 sm:grid-cols-2">
+              <label className="space-y-1.5 text-sm text-gray-700 dark:text-gray-200">
+                <span className="block text-xs font-medium text-gray-500 dark:text-gray-400">
+                  Data inicial
+                </span>
+                <Input
+                  type="date"
+                  value={dateRange.createdFrom}
+                  onChange={(event) =>
+                    onDateRangeChange({
+                      ...dateRange,
+                      createdFrom: event.target.value,
+                    })
+                  }
+                />
+              </label>
+              <label className="space-y-1.5 text-sm text-gray-700 dark:text-gray-200">
+                <span className="block text-xs font-medium text-gray-500 dark:text-gray-400">
+                  Data final
+                </span>
+                <Input
+                  type="date"
+                  value={dateRange.createdTo}
+                  onChange={(event) =>
+                    onDateRangeChange({
+                      ...dateRange,
+                      createdTo: event.target.value,
+                    })
+                  }
+                />
+              </label>
+            </div>
+          </section>
+
           {FILTER_GROUPS.map((group) => {
             const options = filterOptions[group.key]
 
@@ -898,6 +963,40 @@ function buildGroupedChart(rows: ReportRow[], key: FilterKey) {
       total,
     }))
     .sort((a, b) => b.total - a.total || a.label.localeCompare(b.label))
+}
+
+function isWithinCreatedDateRange(createdAt: string | null, dateRange: DateRangeFilter) {
+  if (!dateRange.createdFrom && !dateRange.createdTo) {
+    return true
+  }
+
+  if (!createdAt) {
+    return false
+  }
+
+  const createdTime = new Date(createdAt).getTime()
+
+  if (Number.isNaN(createdTime)) {
+    return false
+  }
+
+  if (dateRange.createdFrom) {
+    const fromTime = new Date(`${dateRange.createdFrom}T00:00:00`).getTime()
+
+    if (!Number.isNaN(fromTime) && createdTime < fromTime) {
+      return false
+    }
+  }
+
+  if (dateRange.createdTo) {
+    const toTime = new Date(`${dateRange.createdTo}T23:59:59.999`).getTime()
+
+    if (!Number.isNaN(toTime) && createdTime > toTime) {
+      return false
+    }
+  }
+
+  return true
 }
 
 function getUniqueSortedValues(values: string[]) {
